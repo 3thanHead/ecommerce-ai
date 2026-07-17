@@ -1,0 +1,10 @@
+.env
+data/
+site/dist/
+videos/
+images/
+__pycache__/
+*.pyc
+.terraform/
+*.tfstate*
+.terraform.lock.hcl

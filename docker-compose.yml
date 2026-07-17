@@ -1,0 +1,27 @@
+# The generation service. Point LLM_BASE_URL at the home cluster's HAProxy
+# master; run this anywhere on the LAN (dev laptop or the master itself).
+# Per-machine config lives in .env (auto-read by compose).
+services:
+  storefront:
+    build:
+      context: .
+    image: storefront-ai
+    ports:
+      - "${PORT:-8820}:8820"
+    environment:
+      # The home LLM cluster (HAProxy). Free local inference — the whole
+      # point of this service living on the LAN. Real address in .env
+      # (gitignored; see .env.example) — no LAN IPs in git.
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://localhost:11434}
+      LLM_MODEL: ${LLM_MODEL:-qwen3:4b-instruct}
+      # The fleet's image node (ComfyUI/SD on the RTX box), when up.
+      IMAGE_BASE_URL: ${IMAGE_BASE_URL:-}
+      # Public site base (the CloudFront URL) for links the agent mints.
+      BLOG_BASE_URL: ${BLOG_BASE_URL:-}
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-}
+      PRINTIFY_API_KEY: ${PRINTIFY_API_KEY:-}
+      PRINTIFY_SHOP_ID: ${PRINTIFY_SHOP_ID:-}
+      DB_PATH: /data/agents.db
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

@@ -1,0 +1,429 @@
+{
+  "brand": {
+    "name": "CodeCalm",
+    "tagline": "Dev work. Cozy flow.",
+    "hero": "Keep your code clean and your coffee warm with simple, intentional tools.",
+    "accent": "#2563eb"
+  },
+  "seed": "cozy desk accessories for remote developers",
+  "products": [
+    {
+      "sku": "code-coffee-desk-organizer-36a1b2",
+      "title": "Code & Coffee Desk Organizer",
+      "subtitle": "Minimalist daily dev ritual template",
+      "description": "A simple, printable checklist designed for remote developers who want comfort and clarity in their home office. This template blends workflow with cozy routines\u2014perfect for those who code while sipping coffee and staying grounded.",
+      "bullets": [
+        "Daily goals section with space for 3 short tasks",
+        "Coffee notes area for brews, temperature, and mood",
+        "Dev mood tracker with emoji prompts (\ud83d\ude0a, \ud83d\ude80, \ud83c\udf27\ufe0f)",
+        "Printable layout fits standard A4 or 8.5x11 paper",
+        "Clean, minimalist design with soft typography",
+        "Ready to use\u2014no setup or customization needed"
+      ],
+      "backend_keywords": [
+        "remote dev checklist",
+        "home office workflow",
+        "cozy coding routine",
+        "developer daily planner",
+        "home office organizer",
+        "coffee and code template",
+        "dev ritual",
+        "minimalist desk setup",
+        "home office productivity",
+        "digital dev planner"
+      ],
+      "tags": [
+        "remote-work",
+        "developer",
+        "home-office",
+        "productivity",
+        "cozy",
+        "workflow",
+        "digital-template",
+        "daily-planner",
+        "coffee-ritual",
+        "minimalist"
+      ],
+      "image_prompts": [
+        "A clean, minimalist A4 printable template with soft beige background, showing a desk with a laptop, mug, and notebook, featuring a daily goal section, coffee notes, and emoji mood tracker",
+        "Close-up of the template with highlighted sections: 'Today\u2019s Goals', 'Coffee Notes', 'Dev Mood (\ud83d\ude0a \ud83d\ude80 \ud83c\udf27\ufe0f)' in soft font, on a white background with light texture",
+        "A developer in a hoodie sitting at a cozy home desk with a laptop, mug, and the template laid out on a notebook, natural light, warm tones"
+      ],
+      "kind": "digital",
+      "price_usd": 8.0,
+      "asset_spec": "PDF file, A4 size (8.5x11 inches), 2 pages, portrait orientation, 300 dpi, single file, printable layout with clear sections",
+      "niche": "cozy remote dev",
+      "status": "draft",
+      "created_at": "2026-07-16T20:16:17.415128+00:00"
+    },
+    {
+      "sku": "minimalist-code-coffee-desk-orga-886c94",
+      "title": "Minimalist Code & Coffee Desk Organizer",
+      "subtitle": "Printable PDF for remote devs: goals, coffee notes, mood tracker",
+      "description": "A simple, clean template designed for remote software developers. Use it to track daily goals, jot coffee notes, and check in on your dev mood with emoji prompts. Perfect for home offices that blend productivity with cozy rituals.",
+      "bullets": [
+        "Printable PDF layout for easy use on your desk",
+        "Daily goal space with clear, minimal formatting",
+        "Coffee notes section for your brew ritual",
+        "Dev mood tracker with emoji prompts (\ud83d\ude0a, \ud83d\ude80, \ud83d\udee0\ufe0f, etc.)",
+        "Designed for 8.5 x 11 inch paper or A4",
+        "No extra software or setup needed"
+      ],
+      "backend_keywords": [
+        "remote dev workflow",
+        "coffee notes template",
+        "dev mood tracker",
+        "printable desk organizer",
+        "software developer tools",
+        "home office productivity",
+        "minimalist dev template",
+        "daily goals for developers",
+        "cozy remote work",
+        "printable coffee mug design"
+      ],
+      "tags": [
+        "remote-work",
+        "developer-tools",
+        "productivity",
+        "cozy",
+        "minimalist",
+        "home-office",
+        "digital-template",
+        "coffee-ritual",
+        "dev-workflow",
+        "printable"
+      ],
+      "image_prompts": [
+        "A clean, minimalist desk with a printed PDF template laid out on a wooden surface, showing daily goals, coffee notes, and a mood emoji tracker, soft natural light, warm color palette",
+        "Close-up of a printed desk organizer with a coffee mug beside it, showing the layout with highlighted sections: goal field, coffee note space, emoji mood tracker, minimalist font",
+        "Flat lay of a developer's home office: laptop, notebook, mug, and the printable template on a desk, soft lighting, cozy atmosphere"
+      ],
+      "kind": "digital",
+      "price_usd": 8.0,
+      "asset_spec": "PDF file, A4 size (8.5 x 11 inches), 300 dpi, single page, one printable layout with clear sections",
+      "niche": "cozy remote dev",
+      "status": "draft",
+      "created_at": "2026-07-16T20:15:33.053982+00:00"
+    },
+    {
+      "sku": "cozy-dev-journal-daily-coffee-co-43a9d9",
+      "title": "Cozy Dev Journal: Daily Coffee & Code Template",
+      "subtitle": "Minimalist PDF journal for remote developers",
+      "description": "A simple, printable journal designed for remote software developers. Each day includes space for coding goals, coffee rituals, and a quick mood check using emoji prompts. Perfect for balancing productivity with comfort at home.",
+      "bullets": [
+        "Daily goal section for coding tasks",
+        "Coffee ritual notes with time and flavor prompts",
+        "Mood tracker using emoji prompts (\ud83d\ude0a \ud83c\udf1f \ud83d\ude10)",
+        "Printable layout for easy use on a desk or notebook",
+        "Minimalist design with clean typography and soft colors",
+        "No extra software \u2014 just a PDF you can open and print"
+      ],
+      "backend_keywords": [
+        "dev journal",
+        "remote developer tools",
+        "coffee and code",
+        "daily coding goals",
+        "dev mood tracker",
+        "printable dev template",
+        "cozy remote work",
+        "emoji mood tracker",
+        "software developer journal",
+        "work from home journal"
+      ],
+      "tags": [
+        "dev",
+        "remote-work",
+        "productivity",
+        "cozy",
+        "journal",
+        "coffee",
+        "workflow",
+        "minimalist",
+        "digital-template",
+        "emoji"
+      ],
+      "image_prompts": [
+        "A clean, minimalist PDF template on a white desk with a coffee mug and laptop, showing daily goal, coffee ritual, and emoji mood tracker sections",
+        "Close-up of a printed journal page with soft gray background, emoji mood tracker, and handwritten-style goal space",
+        "Digital mockup of a dev journal with soft brown and beige colors, showing a daily entry with coffee notes and a smiley emoji"
+      ],
+      "kind": "digital",
+      "price_usd": 7.0,
+      "asset_spec": "PDF file, A4 size, 1 page, portrait orientation, 300 dpi, printable layout with clear section headings",
+      "niche": "cozy remote dev",
+      "status": "draft",
+      "created_at": "2026-07-16T20:14:48.854675+00:00"
+    },
+    {
+      "sku": "calm-code-desk-art-minimalist-ai-24bd73",
+      "title": "Calm Code Desk Art - Minimalist AI Design",
+      "subtitle": "Soft gradients and floating code snippets for focused coding nights",
+      "description": "Designed for remote developers working late, this minimalist desk art blends code and calm. The soft gradient background with gently floating code snippets and a coffee cup creates a soothing visual rhythm that reduces mental fatigue. Perfect for your screen or desk to maintain focus during long coding sessions.",
+      "bullets": [
+        "AI-generated minimalist design with soft gradient background",
+        "Floating code snippets in clean, modern typography",
+        "A subtle coffee cup icon to symbolize focus and comfort",
+        "Print-ready or download as digital file for immediate use",
+        "No clutter \u2014 just clean, calming visuals that match coding flow",
+        "Instantly downloadable in high-resolution format"
+      ],
+      "tags": [
+        "developer-desk-art",
+        "coding-focus",
+        "minimalist-design",
+        "ai-generated-art",
+        "remote-work",
+        "mental-fatigue",
+        "calm-code",
+        "developer-wellness",
+        "focus-tools",
+        "late-night-coding"
+      ],
+      "kind": "digital",
+      "price_usd": 12.0,
+      "asset_spec": "PNG file, 1920x1080 pixels, transparent background, high resolution, suitable for desktop or monitor use",
+      "niche": "DevDeskCalm",
+      "status": "published",
+      "created_at": "2026-07-16T18:57:00.069042+00:00",
+      "publish": [
+        {
+          "platform": "storefront",
+          "ok": true,
+          "url": "http://localhost:8810/shop/calm-code-desk-art-minimalist-ai-24bd73"
+        }
+      ],
+      "payment": {
+        "error": "stripe not configured (set STRIPE_API_KEY)"
+      },
+      "post_slug": "calm-code-desk-art"
+    }
+  ],
+  "posts": [
+    {
+      "slug": "calm-code-desk-art",
+      "title": "Calm Code Desk Art: Your Desk, Reimagined for Focus",
+      "excerpt": "A minimalist digital desk art piece that blends soft gradients and floating code snippets to reduce mental fatigue during long coding sessions.",
+      "body_markdown": "You\u2019ve been coding late into the night. Your screen is bright, your mind is tired, and your desk feels like a battlefield of unfinished tasks.\n\nWhat if your desk could help you feel more centered?\n\nIntroducing Calm Code Desk Art \u2014 a minimalist digital piece designed specifically for remote developers who work long hours. It features soft gradients that gently shift like a calm ocean, with floating code snippets that hover like digital leaves in a breeze. A small coffee cup sits in the corner, a quiet nod to the ritual of the coder\u2019s day.\n\nThis isn\u2019t just decoration. It\u2019s a visual rhythm. The soft, flowing design helps your eyes rest, reduces mental strain, and creates a sense of calm \u2014 especially when you\u2019re staring at a blank screen for hours.\n\nThe art is created with AI-assisted design principles to ensure clean lines, balanced composition, and a soothing aesthetic that feels natural and unobtrusive. It\u2019s not flashy or distracting \u2014 just simple, elegant, and deeply focused.\n\nWhether you place it on your monitor, beside your keyboard, or on a floating shelf, it becomes a quiet companion during your most intense coding sessions.\n\nIf you\u2019re someone who values focus, clarity, and a little bit of peace in a chaotic world, this piece is for you.\n\n\ud83d\udc49 [Get Calm Code Desk Art for $12](http://localhost:8810/shop/calm-code-desk-art-minimalist-ai-24bd73)\n\n(Note: This digital art is generated with AI-assisted design to ensure visual harmony and minimalism. It is not a physical product.)",
+      "tags": [
+        "coding",
+        "focus",
+        "minimalist",
+        "digital-art",
+        "developer",
+        "workplace"
+      ],
+      "sku": "calm-code-desk-art-minimalist-ai-24bd73",
+      "url": "http://localhost:8810/blog/calm-code-desk-art",
+      "published_at": "2026-07-16T18:57:40.620848+00:00"
+    }
+  ],
+  "pages": [
+    {
+      "slug": "about",
+      "title": "About",
+      "body_markdown": "CodeCalm is a small shop built for remote developers who want to work with calm, focus, and a little bit of warmth. We believe great code flows best when it\u2019s paired with a cozy ritual \u2014 like a morning coffee, a daily goal, or a moment to check in with your mood.\n\nOur products are simple, digital templates designed to fit into your daily routine. The 'Code & Coffee' desk organizer, for example, includes space for daily goals, coffee notes, and a dev mood tracker with emoji prompts \u2014 all designed to help you stay present without clutter.\n\nWe use AI tools to generate clean, minimalist designs, but every product is hand-reviewed and crafted with intention. No fluff. No overcomplication. Just what you need to feel grounded while coding.\n\nThis is not a large brand. It\u2019s a small, human-led shop with one mission: help remote devs feel calm, focused, and connected to their work \u2014 one simple template at a time."
+    },
+    {
+      "slug": "faq",
+      "title": "FAQ",
+      "body_markdown": "Q: Are these products printable?\nA: Yes. All templates are designed for easy printing on standard paper. You\u2019ll receive a PDF with clear layout instructions.\n\nQ: Do you offer physical items?\nA: No. All products are digital downloads. We don\u2019t produce physical goods.\n\nQ: How long does delivery take?\nA: Instant. After purchase, you\u2019ll receive a download link via email within seconds.\n\nQ: Can I use these templates for personal or professional use?\nA: Yes. All templates are for personal use only. They are not intended for commercial resale or use in business settings.\n\nQ: Is the design AI-generated?\nA: Yes. Our designs are created with AI tools, but each one is reviewed for clarity, simplicity, and aesthetic balance. We don\u2019t use AI to generate content for your personal use \u2014 only to assist in design creation."
+    },
+    {
+      "slug": "shipping-returns",
+      "title": "Shipping & Returns",
+      "body_markdown": "All products are digital downloads. After purchase, you\u2019ll receive a secure download link via email within seconds.\n\nNo physical shipping occurs. No shipping fees. No returns. Digital products are non-refundable once downloaded.\n\nIf you need a new download link, contact support@codecalm.dev. We\u2019ll send it within 24 hours.\n\nWe do not offer returns or exchanges for digital products. This is a digital-only service. All content is delivered immediately upon purchase."
+    },
+    {
+      "slug": "privacy",
+      "title": "Privacy",
+      "body_markdown": "We do not collect, store, or share any personal information. Your email address is only used to send the download link after purchase.\n\nNo cookies, no tracking, no data collection. Your privacy is respected.\n\nWe do not sell, rent, or trade your information with third parties. This site does not use any external analytics tools.\n\nAll content is stored securely on our servers and deleted after 90 days if not accessed. We do not retain any data beyond what is necessary to fulfill your order."
+    },
+    {
+      "slug": "terms",
+      "title": "Terms",
+      "body_markdown": "By purchasing from CodeCalm, you agree to these terms.\n\nAll products are digital downloads. You receive a single, non-exclusive license to use the templates for personal, non-commercial purposes.\n\nYou may not resell, redistribute, or use the content in any commercial setting.\n\nCodeCalm is not responsible for technical issues with your device or internet connection.\n\nAll content is provided 'as is' with no warranties. We do not guarantee compatibility with all devices or software.\n\nBy purchasing, you confirm you are over 18 and agree to these terms. No legal claims will be accepted."
+    }
+  ],
+  "marketing": {
+    "plans": [
+      {
+        "sku": "code-coffee-desk-organizer-36a1b2",
+        "title": "Code & Coffee Desk Organizer",
+        "hook": "Your daily dev ritual starts here",
+        "caption": "A simple, printable desk organizer for your coding flow. Perfect for devs who value calm and clarity. Grab it now to build your daily rhythm.",
+        "hashtags": [
+          "devlife",
+          "codingritual",
+          "minimalistdev",
+          "coffeedev",
+          "workflowtools",
+          "digitalproduct",
+          "devroutine"
+        ],
+        "overlay_texts": [
+          "Daily Goals: 3 tasks max",
+          "Coffee Notes: Brew + Mood",
+          "Dev Mood: \ud83d\ude0a \ud83d\ude80 \ud83c\udf27\ufe0f",
+          "Printable A4 or 8.5x11"
+        ],
+        "script": [
+          "Close-up of clean layout. Text: Daily Goals: 3 tasks max.",
+          "Quick swipe: Coffee Notes: Brew + Mood.",
+          "Mood emoji prompt: \ud83d\ude0a \ud83d\ude80 \ud83c\udf27\ufe0f.",
+          "Final frame: Printable A4 or 8.5x11. Ready to use."
+        ],
+        "ad_angle": "Minimalist, no-frills daily flow for developers"
+      },
+      {
+        "sku": "minimalist-code-coffee-desk-orga-886c94",
+        "title": "Minimalist Code & Coffee Desk Organizer",
+        "hook": "Your desk. Your flow.",
+        "caption": "A simple PDF for remote devs. Track goals, coffee, and mood. No setup. Just print and go. Try it today.",
+        "hashtags": [
+          "devlife",
+          "remotework",
+          "codetools",
+          "productivity",
+          "devflow",
+          "minimalistdesign",
+          "digitalproduct",
+          "coffeeandcode"
+        ],
+        "overlay_texts": [
+          "Daily Goals",
+          "Coffee Notes",
+          "Mood Tracker",
+          "Print & Use"
+        ],
+        "script": [
+          "Desk looks clean. Flow feels real.",
+          "Printable PDF. No software. No fuss.",
+          "Goals. Coffee. Mood. All on one page.",
+          "Designed for devs who value calm."
+        ],
+        "ad_angle": "Minimalism for focused, calm work"
+      },
+      {
+        "sku": "cozy-dev-journal-daily-coffee-co-43a9d9",
+        "title": "Cozy Dev Journal: Daily Coffee & Code Template",
+        "hook": "Your coffee. Your code. Your day.",
+        "caption": "A simple journal for remote devs. Track goals, coffee, and mood. No apps. Just a PDF. Grab it now.",
+        "hashtags": [
+          "devjournal",
+          "remotework",
+          "codingflow",
+          "devtools",
+          "minimalistdesign",
+          "digitalproduct",
+          "coffeecode",
+          "developerlife"
+        ],
+        "overlay_texts": [
+          "Daily Goal: Code Today",
+          "Coffee Ritual: Time & Flavor",
+          "Mood: \ud83d\ude0a \ud83c\udf1f \ud83d\ude10",
+          "Printable. No software."
+        ],
+        "script": [
+          "See the journal layout \u2014 clean, simple, ready to use.",
+          "Daily goal. Coffee notes. Mood emoji. All in one page.",
+          "Print it. Open it. Start your flow.",
+          "No setup. Just a PDF. Open it now."
+        ],
+        "ad_angle": "Minimalism and simplicity for daily dev rituals"
+      },
+      {
+        "sku": "calm-code-desk-art-minimalist-ai-24bd73",
+        "title": "Calm Code Desk Art - Minimalist AI Design",
+        "hook": "Code. Flow. Calm.",
+        "caption": "Your desk, redesigned for focus. Download now and feel the quiet hum of calm coding. \ud83d\uddbc\ufe0f",
+        "hashtags": [
+          "calmcode",
+          "codingflow",
+          "minimalistdesign",
+          "devlife",
+          "focusdesk",
+          "aiart",
+          "codetool",
+          "workcomfort"
+        ],
+        "overlay_texts": [
+          "Calm Code Desk Art",
+          "Soft gradients. Floating code.",
+          "Coffee cup. Focus. Flow.",
+          "Download in 1 click"
+        ],
+        "script": [
+          "Scene opens: minimalist gradient background with floating code snippets.",
+          "Text overlay: 'Calm Code Desk Art'.",
+          "Quick flash: coffee cup icon appears, then fades.",
+          "Final frame: 'Download in 1 click' with clean font."
+        ],
+        "ad_angle": "Focus and comfort in a clutter-free digital workspace"
+      }
+    ],
+    "calendar": [
+      {
+        "day": 1,
+        "sku": "code-coffee-desk-organizer-36a1b2",
+        "platform": "tiktok",
+        "hook": "Your daily dev ritual starts here"
+      },
+      {
+        "day": 2,
+        "sku": "minimalist-code-coffee-desk-orga-886c94",
+        "platform": "reels",
+        "hook": "Your desk. Your flow."
+      },
+      {
+        "day": 3,
+        "sku": "cozy-dev-journal-daily-coffee-co-43a9d9",
+        "platform": "tiktok",
+        "hook": "Your coffee. Your code. Your day."
+      },
+      {
+        "day": 4,
+        "sku": "calm-code-desk-art-minimalist-ai-24bd73",
+        "platform": "reels",
+        "hook": "Code. Flow. Calm."
+      },
+      {
+        "day": 5,
+        "sku": "code-coffee-desk-organizer-36a1b2",
+        "platform": "tiktok",
+        "hook": "Your daily dev ritual starts here"
+      },
+      {
+        "day": 6,
+        "sku": "minimalist-code-coffee-desk-orga-886c94",
+        "platform": "reels",
+        "hook": "Your desk. Your flow."
+      },
+      {
+        "day": 7,
+        "sku": "cozy-dev-journal-daily-coffee-co-43a9d9",
+        "platform": "tiktok",
+        "hook": "Your coffee. Your code. Your day."
+      },
+      {
+        "day": 8,
+        "sku": "calm-code-desk-art-minimalist-ai-24bd73",
+        "platform": "reels",
+        "hook": "Code. Flow. Calm."
+      },
+      {
+        "day": 9,
+        "sku": "code-coffee-desk-organizer-36a1b2",
+        "platform": "tiktok",
+        "hook": "Your daily dev ritual starts here"
+      },
+      {
+        "day": 10,
+        "sku": "minimalist-code-coffee-desk-orga-886c94",
+        "platform": "reels",
+        "hook": "Your desk. Your flow."
+      }
+    ],
+    "note": "render videos locally: python apps/storefront/media.py --plan (uses /store/export)"
+  }
+}
