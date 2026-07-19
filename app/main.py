@@ -8,13 +8,16 @@ inference, nothing paid. GitHub Actions only renders + ships the approved
 content to S3/CloudFront (no LLM, no LAN needed there).
 
 REST
+    GET  /                           the chat console (shop agent + plain chat UI)
     GET  /health                     liveness + registered agents
+    GET  /api/models                 models available on LLM_BASE_URL
     GET  /api/agents                 registered agents
     POST /api/agents/shop/run        {"input": "start <seed>" | "approve" | ...}
     GET  /store/export               the content snapshot (commit to content/)
     GET  /shop, /blog                live LAN preview of the storefront
 
 WS
+    /ws/chat                         the chat console stream (plain chat or agent)
     /ws/agents/shop                  the live AgentEvent stream
 """
 import logging

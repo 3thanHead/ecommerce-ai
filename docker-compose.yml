@@ -8,11 +8,15 @@ services:
     image: storefront-ai
     ports:
       - "${PORT:-8820}:8820"
+    extra_hosts:
+      # Lets LLM_BASE_URL=http://host.docker.internal:11434 reach an Ollama
+      # running on THIS host (local/dev), the same as iot_ai's chat app.
+      - "host.docker.internal:host-gateway"
     environment:
-      # The home LLM cluster (HAProxy). Free local inference — the whole
-      # point of this service living on the LAN. Real address in .env
-      # (gitignored; see .env.example) — no LAN IPs in git.
-      LLM_BASE_URL: ${LLM_BASE_URL:-http://localhost:11434}
+      # The LLM endpoint — this host's own Ollama (local/dev) or the home
+      # cluster's HAProxy master, whichever .env names (gitignored; see
+      # .env.example). No LAN IPs in git. Default reaches a local Ollama.
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434}
       LLM_MODEL: ${LLM_MODEL:-qwen3:4b-instruct}
       # The fleet's image node (ComfyUI/SD on the RTX box), when up.
       IMAGE_BASE_URL: ${IMAGE_BASE_URL:-}

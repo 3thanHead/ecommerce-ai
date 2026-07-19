@@ -2,6 +2,7 @@
 # free); GitHub Actions only renders + ships what's committed.
 #
 #   make run        start the generation service (docker, LAN)
+#   make chat       open the chat console (shop agent + plain chat) in a browser
 #   make shop       the approval REPL (start/pick/approve/theme/...)
 #   make export     snapshot approved content -> content/export.json
 #   make site       build the static site from the committed snapshot
@@ -11,6 +12,10 @@ URL ?= http://localhost:8820
 
 run:
 	docker compose up -d --build
+
+chat:
+	@python3 -c "import webbrowser; webbrowser.open('$(URL)/')" || true
+	@echo "chat console at $(URL)/  (run 'make run' first if it's not up)"
 
 shop:
 	python3 cli.py
@@ -32,4 +37,4 @@ ship:
 	git push
 	@echo "pushed -- GitHub Actions builds + deploys to S3/CloudFront"
 
-.PHONY: run shop export site videos ship
+.PHONY: run chat shop export site videos ship

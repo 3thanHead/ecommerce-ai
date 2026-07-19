@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>storefront chat</title>
+  <style>
+    /* Palette mirrors the storefront's own dark theme (app/agents/shop/render.py). */
+    :root {
+      --bg: #16181c;
+      --panel: #1e2126;
+      --border: #2c3038;
+      --text: #e8e8e8;
+      --muted: #9aa0a8;
+      --accent: #2563eb;
+      --accent-ink: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+    header h1 { font-size: 15px; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 7px; }
+    header h1 .logo { font-size: 17px; }
+    header .spacer { flex: 1; }
+    select {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 14px;
+      outline: none;
+    }
+    select:focus { border-color: var(--accent); }
+    #status { font-size: 12px; color: var(--muted); }
+    #status.live::before { content: "● "; color: #4caf50; }
+    #status.off::before  { content: "● "; color: #e05252; }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 0;
+    }
+    .row { max-width: 760px; margin: 0 auto; padding: 6px 18px; }
+    .msg { display: flex; gap: 12px; padding: 10px 0; }
+    .avatar {
+      flex: 0 0 26px; height: 26px; width: 26px; border-radius: 6px;
+      display: grid; place-items: center; font-size: 13px; font-weight: 700;
+    }
+    .user .avatar { background: #333a44; }
+    .bot .avatar  { background: var(--accent); color: var(--accent-ink); }
+    .bubble { white-space: pre-wrap; word-wrap: break-word; padding-top: 2px; }
+    .bot .bubble .cursor {
+      display: inline-block; width: 7px; height: 15px;
+      background: var(--accent); margin-left: 1px; vertical-align: text-bottom;
+      animation: blink 1s steps(2) infinite;
+    }
+    @keyframes blink { 0%,50% { opacity: 1; } 50.01%,100% { opacity: 0; } }
+    .error { color: #e98080; font-size: 13px; }
+
+    .welcome { max-width: 760px; margin: 8px auto 0; color: var(--muted); font-size: 13.5px;
+      border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; background: var(--panel); }
+    .welcome b { color: var(--text); }
+    .welcome code { background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+      padding: 1px 6px; font-size: 12.5px; color: var(--text); }
+    .welcome .cmds { margin-top: 8px; line-height: 2; }
+
+    footer {
+      border-top: 1px solid var(--border);
+      background: var(--panel);
+      padding: 14px 18px;
+    }
+    .composer {
+      max-width: 760px; margin: 0 auto;
+      display: flex; gap: 10px; align-items: flex-end;
+    }
+    textarea {
+      flex: 1; resize: none; background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 12px;
+      padding: 12px 14px; font: inherit; outline: none; max-height: 200px;
+    }
+    textarea:focus { border-color: var(--accent); }
+    button {
+      background: var(--accent); color: var(--accent-ink); border: none;
+      border-radius: 10px; padding: 11px 16px; font-weight: 600;
+      cursor: pointer; font-size: 14px;
+    }
+    button:disabled { opacity: 0.4; cursor: default; }
+    button.stop { background: #b54a3a; color: #fff; }
+    .stopped { color: var(--muted); font-size: 12px; font-style: italic; }
+    .node-badge { display: none; font-size: 11px; color: var(--muted); margin-bottom: 5px; letter-spacing: .02em; }
+    .node-badge.on { display: block; }
+    .node-badge.on::before { content: "● "; color: #4caf50; }
+    .hint { max-width: 760px; margin: 6px auto 0; color: var(--muted); font-size: 11px; }
+
+    /* -- agent activity feed (stage generation, tool calls, the final prompt) -- */
+    .activity {
+      border-left: 2px solid var(--border);
+      margin: 4px 0 8px;
+      padding: 2px 0 2px 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .activity .step { padding: 2px 0; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
+    .activity .step .spin {
+      display: inline-block; margin-right: 6px; color: var(--accent);
+      animation: rotate 1s linear infinite;
+    }
+    @keyframes rotate { to { transform: rotate(360deg); } }
+    .activity .step.done::before { content: "✓ "; color: #4caf50; }
+    .activity .step.fail::before { content: "✗ "; color: #e05252; }
+    .activity .step.think { font-style: italic; }
+    /* Current venture stage (niche → brand → catalog → assembly → marketing). */
+    .stage-chip {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      border-radius: 6px; padding: 1px 8px; margin-right: 8px;
+      vertical-align: 1px; letter-spacing: .03em; text-transform: uppercase;
+      background: #17306a; color: #a9c2ff;
+    }
+    .stage-chip.done { background: #16391f; color: #7ddb8f; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span class="logo">🛍</span> storefront chat</h1>
+    <select id="agent" title="Agent" style="display:none"></select>
+    <select id="model" title="Model (plain chat)"></select>
+    <div class="spacer"></div>
+    <span id="status" class="off">connecting…</span>
+  </header>
+
+  <div id="messages"></div>
+
+  <footer>
+    <div class="composer">
+      <textarea id="input" rows="1" placeholder="Ask about the shop, or type a command…" autofocus></textarea>
+      <button id="send">Send</button>
+    </div>
+    <div class="hint">Enter to send · Shift+Enter for newline · Esc to stop</div>
+  </footer>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const messagesEl = $("messages");
+    const modelEl = $("model");
+    const agentEl = $("agent");
+    const inputEl = $("input");
+    const sendEl = $("send");
+    const statusEl = $("status");
+
+    const history = [];   // {role, content} sent to the model (plain chat)
+    let ws = null;
+    let streaming = false;
+
+    function setStatus(text, cls) {
+      statusEl.textContent = text;
+      statusEl.className = cls;
+    }
+
+    function addMessage(role, text) {
+      const row = document.createElement("div");
+      row.className = "row";
+      const msg = document.createElement("div");
+      msg.className = "msg " + (role === "user" ? "user" : "bot");
+      const avatar = document.createElement("div");
+      avatar.className = "avatar";
+      avatar.textContent = role === "user" ? "U" : "AI";
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      if (role === "bot") {
+        // badge (which node served) + text are separate children so per-token
+        // updates don't wipe the badge; the cursor is appended after, by send().
+        const badge = document.createElement("span");
+        badge.className = "node-badge";
+        const textEl = document.createElement("span");
+        textEl.className = "text";
+        textEl.textContent = text;
+        bubble.append(badge, textEl);
+      } else {
+        bubble.textContent = text;
+      }
+      msg.append(avatar, bubble);
+      row.append(msg);
+      messagesEl.append(row);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return bubble;
+    }
+
+    // ----- model list (for plain chat; the shop agent uses the server's model) -----
+    async function loadModels() {
+      try {
+        const res = await fetch("/api/models");
+        const data = await res.json();
+        modelEl.innerHTML = "";
+        for (const name of data.models) {
+          const opt = document.createElement("option");
+          opt.value = name;
+          opt.textContent = name;
+          modelEl.append(opt);
+        }
+        if (!data.models.length) {
+          modelEl.innerHTML = "<option>(no models on the LLM endpoint)</option>";
+        }
+        // Default to a model that's already loaded, so the first message streams
+        // immediately instead of waiting on a cold model load.
+        const warm = data.models.find((m) => (data.running || []).includes(m));
+        if (warm) modelEl.value = warm;
+      } catch (e) {
+        modelEl.innerHTML = "<option>(failed to load models)</option>";
+      }
+    }
+
+    // ----- agent list (route a message to an in-process agent, or plain chat) -----
+    // /api/agents returns a bare list [{name, description}] (app/api/agents.py).
+    async function loadAgents() {
+      try {
+        const res = await fetch("/api/agents");
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : (data.agents || []);
+        agentEl.innerHTML = '<option value="">Chat (plain model)</option>';
+        for (const a of list) {
+          const opt = document.createElement("option");
+          opt.value = a.name;
+          opt.textContent = "agent: " + a.name;
+          opt.title = a.description || "";
+          agentEl.append(opt);
+        }
+        agentEl.style.display = list.length ? "" : "none";
+        // The shop agent is the point of this console — default to it if present.
+        const shop = list.find((a) => a.name === "shop");
+        if (shop) { agentEl.value = "shop"; onAgentChange(); }
+      } catch (e) {
+        agentEl.style.display = "none";
+      }
+    }
+
+    // The model picker only matters for plain chat; dim it when an agent is active.
+    function onAgentChange() {
+      modelEl.style.opacity = agentEl.value ? 0.4 : 1;
+      modelEl.title = agentEl.value ? "Model (used only for plain chat)" : "Model (plain chat)";
+    }
+    agentEl.addEventListener("change", onAgentChange);
+
+    // ----- agent activity feed -----
+    let activityEl = null;   // the working-steps list inside the active bubble
+    let workingStep = null;  // the step line currently spinning
+
+    function activityStep(text, cls) {
+      if (!activityEl) {
+        activityEl = document.createElement("div");
+        activityEl.className = "activity";
+        activeBubble.insertBefore(activityEl, activeBubble.querySelector(".text"));
+      }
+      const step = document.createElement("div");
+      step.className = "step" + (cls ? " " + cls : "");
+      step.textContent = text;
+      activityEl.append(step);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return step;
+    }
+
+    function onAgentEvent(ev) {
+      if (ev.type === "start") {
+        workingStep = activityStep("");
+        const s = document.createElement("span");
+        s.className = "spin"; s.textContent = "◐";
+        workingStep.append(s, document.createTextNode(`agent ${ev.agent} is working…`));
+      } else if (ev.type === "thinking") {
+        activityStep(ev.text, "think");
+      } else if (ev.type === "tool_call") {
+        activityStep(`${ev.tool}(${JSON.stringify(ev.args)})`);
+      } else if (ev.type === "tool_result") {
+        const ok = !(ev.result && ev.result.error);
+        const last = activityEl && activityEl.lastElementChild;
+        if (last && !last.classList.contains("done") && !last.classList.contains("fail")
+            && !last.querySelector(".spin")) {
+          last.classList.add(ok ? "done" : "fail");
+          if (!ok) last.textContent += " — " + ev.result.error;
+        }
+      } else if (ev.type === "final") {
+        if (workingStep) { workingStep.remove(); workingStep = null; }
+        const out = ev.output || {};
+        const textEl = activeBubble.querySelector(".text");
+        // The shop agent's final output carries the current venture stage — show it
+        // as a chip so you always see where the approval ladder is.
+        if (out.stage) {
+          const chip = document.createElement("span");
+          chip.className = "stage-chip" + (out.status === "approved" ? " done" : "");
+          chip.textContent = out.stage;
+          activeBubble.insertBefore(chip, textEl);
+        }
+        activeText = out.message || out.reasoning || JSON.stringify(out, null, 2);
+        textEl.textContent = activeText;
+      } else if (ev.type === "error") {
+        if (workingStep) { workingStep.remove(); workingStep = null; }
+        activityStep(ev.message, "fail");
+      }
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    // ----- websocket -----
+    function connect() {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      ws = new WebSocket(`${proto}://${location.host}/ws/chat`);
+      ws.onopen = () => setStatus("connected", "live");
+      ws.onclose = () => { setStatus("disconnected", "off"); setTimeout(connect, 1500); };
+      ws.onerror = () => setStatus("error", "off");
+      ws.onmessage = onMessage;
+    }
+
+    let activeBubble = null;
+    let activeText = "";
+
+    function onMessage(ev) {
+      const data = JSON.parse(ev.data);
+      if (data.type === "agent") {
+        onAgentEvent(data.event);
+      } else if (data.type === "node") {
+        const badge = activeBubble && activeBubble.querySelector(".node-badge");
+        if (badge) { badge.textContent = "served by " + data.name; badge.classList.add("on"); }
+      } else if (data.type === "token") {
+        activeText += data.content;
+        activeBubble.querySelector(".text").textContent = activeText;  // cursor (sibling) stays last
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      } else if (data.type === "done") {
+        finishStreaming();
+        if (activeText) history.push({ role: "assistant", content: activeText });
+      } else if (data.type === "cancelled") {
+        if (activeText) history.push({ role: "assistant", content: activeText });
+        if (activeBubble) {
+          const note = document.createElement("span");
+          note.className = "stopped";
+          note.textContent = activeText ? "  ⊘ stopped" : "⊘ stopped";
+          activeBubble.append(note);
+        }
+        finishStreaming();
+      } else if (data.type === "error") {
+        activeBubble.innerHTML = "";
+        const err = document.createElement("span");
+        err.className = "error";
+        err.textContent = "⚠ " + data.message;
+        activeBubble.append(err);
+        finishStreaming();
+      }
+    }
+
+    function cursor() {
+      const c = document.createElement("span");
+      c.className = "cursor";
+      return c;
+    }
+
+    function setStreaming(on) {
+      streaming = on;
+      sendEl.textContent = on ? "Stop" : "Send";
+      sendEl.classList.toggle("stop", on);  // Stop must stay clickable, so never disable
+    }
+
+    function finishStreaming() {
+      const c = activeBubble && activeBubble.querySelector(".cursor");
+      if (c) c.remove();
+      if (workingStep) { workingStep.remove(); workingStep = null; }
+      activeBubble = null;
+      activityEl = null;
+      setStreaming(false);
+    }
+
+    // ----- sending / stopping -----
+    function send() {
+      const text = inputEl.value.trim();
+      if (!text || streaming || !ws || ws.readyState !== WebSocket.OPEN) return;
+      const agent = agentEl.value || undefined;
+      const model = modelEl.value;
+
+      addMessage("user", text);
+      history.push({ role: "user", content: text });
+      inputEl.value = "";
+      autoGrow();
+
+      activeText = "";
+      activeBubble = addMessage("bot", "");
+      activeBubble.append(cursor());
+
+      setStreaming(true);
+      // Agent turns take just the latest message; plain chat sends the history.
+      ws.send(JSON.stringify({ model, agent, messages: history }));
+    }
+
+    function stop() {
+      if (!streaming || !ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ type: "cancel" }));  // UI finalizes on the server's "cancelled"
+    }
+
+    sendEl.addEventListener("click", () => (streaming ? stop() : send()));
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!streaming) send(); }
+      else if (e.key === "Escape" && streaming) { e.preventDefault(); stop(); }
+    });
+
+    function autoGrow() {
+      inputEl.style.height = "auto";
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + "px";
+    }
+    inputEl.addEventListener("input", autoGrow);
+
+    // A shop-focused welcome: the approval ladder and its commands, plus a nudge
+    // that plain chat (same local/cluster model) is a dropdown away.
+    function welcome() {
+      const w = document.createElement("div");
+      w.className = "row";
+      w.innerHTML = `<div class="welcome">
+        <b>🛍 storefront console.</b> The <b>shop</b> agent builds a store stage by stage —
+        <b>niche → brand → catalog → assembly → marketing</b> — pausing for your approval at
+        each step. Try:
+        <div class="cmds">
+          <code>start eco-friendly pet gear</code> &nbsp;→ generate niche + product ideas<br>
+          <code>pick 2</code> &nbsp;·&nbsp; <code>approve</code> &nbsp;·&nbsp; <code>revise punchier tone</code><br>
+          <code>status</code> &nbsp;·&nbsp; <code>list products</code> &nbsp;·&nbsp; <code>show catalog</code>
+        </div>
+        Switch the <b>agent</b> picker to <i>Chat (plain model)</i> to talk to the raw model instead.
+      </div>`;
+      messagesEl.append(w);
+    }
+
+    welcome();
+    loadModels();
+    loadAgents();
+    connect();
+  </script>
+</body>
+</html>

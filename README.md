@@ -17,8 +17,9 @@ you (REPL/chat) ──► generation service ──► home LLM cluster   (LAN, 
 ## The flow
 
 ```bash
-cp .env.example .env         # point LLM_BASE_URL at the cluster master
+cp .env.example .env         # point LLM_BASE_URL at the cluster master (or local Ollama)
 make run                     # generation service on :8820
+make chat                    # the chat console at :8820/ — shop agent + plain chat
 make shop                    # the REPL: start <seed> → pick <n> → approve …
                              #   preview live at :8820/shop and :8820/blog
 make export                  # approved content → content/export.json
@@ -34,12 +35,27 @@ calendar). **brand** is still a stub that passes through. The storefront
 uses one clean built-in template (`app/agents/shop/render.py`); selectable
 themes are a later addition.
 
+## Chat console
+
+`make run` also serves a browser chat console at **http://localhost:8820/** — the
+same streaming UI as iot_ai's chat app, re-themed for the shop. The **shop** agent
+is selected by default, so you drive the whole approval ladder (`start <seed>`,
+`pick <n>`, `approve`, `revise …`) in chat and watch each stage generate live; its
+activity feed shows the current stage as a chip. Flip the agent picker to *Chat
+(plain model)* to talk to the raw model instead.
+
+It talks to whatever `LLM_BASE_URL` names, so the **same console runs against this
+machine's own Ollama or the home cluster interchangeably** — no code change, just the
+env var (matching iot_ai's `edge up --local` vs cluster). Agents run in-process, so
+there's no second service to start.
+
 ## Layout
 
 ```
 app/            the generation service (FastAPI, same event protocol as iot_ai's agents)
   agents/       venture ladder, prompts (*.md), shop machinery, render.py template
-  api/          /api/agents, /store/export, live LAN preview (/shop, /blog)
+  api/          /api/agents, /store/export, live LAN preview (/shop, /blog), chat console (/)
+  static/       the chat console page (single self-contained index.html)
 site/build.py   export.json -> static site (same template as the live preview)
 site/media.py   marketing plans -> rotating product videos (pure ffmpeg)
 content/        the approved snapshots — the only thing Actions needs
