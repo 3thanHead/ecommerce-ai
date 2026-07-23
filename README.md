@@ -1,88 +1,98 @@
 # storefront-ai
 
-An AI-run storefront where **generation is local and free, hosting is AWS
-and static**. The approval-gated flow (niche → brand → catalog → assembly →
-marketing) runs against the home LLM cluster; every stage waits for your
-`pick` / `approve` / `revise` before anything routes downstream. GitHub
-Actions never calls a model — it renders committed content and ships it to
-S3/CloudFront.
+Turn a category or chat prompt into **product niches** — researched from real
+Reddit discussion + keyword demand, rated for saturation by a local LLM — then
+manage the storefronts those niches become. Generation runs on your **edge-ai**
+Ollama box (free, local); this app just orchestrates and stores.
+
+Being built **feature by feature**. What works today:
+
+- **Feature 1 — niche research agent.** One prompt → the model plans where to
+  look → real Reddit threads + Google-autocomplete keyword demand → the model
+  synthesizes niche candidates, each with a demand score and a **saturation
+  rating it has to justify**. Promote a candidate to create a storefront.
+- **LLM connection.** One Ollama endpoint, model chosen per request. Nothing
+  more — point `OLLAMA_BASE_URL` at edge-ai (or a local Ollama) and go.
+
+Later: CJdropshipping product matching (info/images/videos) → products on the
+storefronts (Feature 2); publishing.
+
+## Architecture
 
 ```
-you (REPL/chat) ──► generation service ──► home LLM cluster   (LAN, free)
-                        │ approvals
-                        ▼
-                 content/export.json  ── git push ──►  Actions: build → S3/CloudFront
+you ─► React admin (Vite)
+          │  /api
+          ▼
+     FastAPI backend ──► research agent ──┬─► Reddit (3 backends, degrade in order)
+          │                               ├─► Google Suggest (keyword demand)
+          │                               └─► edge-ai / Ollama  [the model]
+          ▼
+     SQLite (storefronts, niches, products, runs)
 ```
 
-## The flow
+Deliberately small: SQLite (one file), one backend service, one AI endpoint.
+
+## The Reddit path (why three backends)
+
+Research reads Reddit through one interface that degrades:
+
+1. **PRAW read-only** — used when `REDDIT_CLIENT_ID/SECRET` are set. Structured
+   signals (score, comments, upvote ratio), ToS-compliant, ~100 req/min. Register
+   a **"script" app** at reddit.com/prefs/apps — instant, no approval queue
+   (that gate is only the *commercial* Data API).
+2. **Public `.json` endpoints** — no key, full signals *when they work*. Reddit
+   now 403-blocks these from many IPs.
+3. **Jina page-read** (always-on floor) — `r.jina.ai` reads a subreddit's `/top`
+   listing **server-side**, so it works even when 1 and 2 are blocked from your
+   box. Titles + subreddits are real; engagement numbers aren't in the page, so
+   scores show as 0. This keeps research alive with zero credentials.
+
+Posting is never automated — the agent drafts content for you to post manually.
+
+> **Better signals:** add a Reddit script app (path 1) and/or point
+> `OLLAMA_MODEL` at a larger model — a small 4B model sometimes invents
+> subreddit names, which the discovery filter simply drops.
+
+## Quick start
 
 ```bash
-cp .env.example .env         # point LLM_BASE_URL at the cluster master (or local Ollama)
-make run                     # generation service on :8820
-make chat                    # the chat console at :8820/ — shop agent + plain chat
-make shop                    # the REPL: start <seed> → pick <n> → approve …
-                             #   preview live at :8820/shop and :8820/blog
-make export                  # approved content → content/export.json
-make site                    # render locally, open site/dist/index.html
-make videos                  # ffmpeg product videos (images/<sku>.png needed)
-make ship                    # commit content + push → Actions deploys
+cp .env.example .env          # set OLLAMA_BASE_URL + OLLAMA_MODEL
+make install                  # python venv + npm deps
+
+# two terminals:
+make dev                      # backend  :8820
+make ui                       # admin UI :5173  -> open this
+
+make check-llm                # confirm the edge-ai connection + list models
 ```
 
-Stages live today: **niche** (candidates, re-pickable — switching resets
-downstream), **catalog** (bulk LangGraph node), **assembly** (about/FAQ/
-policy pages), **marketing** (per-product hooks/captions/scripts +
-calendar). **brand** is still a stub that passes through. The storefront
-uses one clean built-in template (`app/agents/shop/render.py`); selectable
-themes are a later addition.
+Docker (backend only; UI via `make ui`):
 
-## Chat console
+```bash
+make run                      # docker compose up -d --build
+```
 
-`make run` also serves a browser chat console at **http://localhost:8820/** — the
-same streaming UI as iot_ai's chat app, re-themed for the shop. The **shop** agent
-is selected by default, so you drive the whole approval ladder (`start <seed>`,
-`pick <n>`, `approve`, `revise …`) in chat and watch each stage generate live; its
-activity feed shows the current stage as a chip. Flip the agent picker to *Chat
-(plain model)* to talk to the raw model instead.
+## Config (`.env`)
 
-It talks to whatever `LLM_BASE_URL` names, so the **same console runs against this
-machine's own Ollama or the home cluster interchangeably** — no code change, just the
-env var (matching iot_ai's `edge up --local` vs cluster). Agents run in-process, so
-there's no second service to start.
+| var | what |
+|-----|------|
+| `OLLAMA_BASE_URL` | edge-ai box, e.g. `http://192.168.1.111:11434` |
+| `OLLAMA_MODEL` | default model (any you've pulled there) |
+| `DATABASE_URL` | SQLite path (default `sqlite:///data/storefront.db`) |
+| `REDDIT_CLIENT_ID` / `_SECRET` | optional; enables the PRAW path |
+| `JINA_READER_BASE` | keyless page reader (default `https://r.jina.ai`) |
 
 ## Layout
 
 ```
-app/            the generation service (FastAPI, same event protocol as iot_ai's agents)
-  agents/       venture ladder, prompts (*.md), shop machinery, render.py template
-  api/          /api/agents, /store/export, live LAN preview (/shop, /blog), chat console (/)
-  static/       the chat console page (single self-contained index.html)
-site/build.py   export.json -> static site (same template as the live preview)
-site/media.py   marketing plans -> rotating product videos (pure ffmpeg)
-content/        the approved snapshots — the only thing Actions needs
-infra/          Terraform: S3 + CloudFront (OAC) + the GitHub OIDC deploy role
-cli.py          the approval REPL (`make shop`)
+backend/app/
+  llm/ollama.py        the whole AI connection (one endpoint, per-call model)
+  research/
+    reddit.py          3-backend Reddit client (PRAW / .json / Jina)
+    keywords.py        Google Suggest keyword expansion
+    web.py             keyless page reader (Jina) + web search
+    agent.py           plan → gather → judge (saturation reasoning)
+  api/                 chat, research, storefronts
+  models.py            Storefront / Niche / Product / ResearchRun (SQLite)
+frontend/src/          React admin: Research, Storefronts, Chat
 ```
-
-## One-time AWS + GitHub setup
-
-1. AWS account, MFA, an admin CLI key, `aws configure` (region `us-east-1`).
-2. ```bash
-   cd infra && terraform init
-   terraform apply -var bucket_name=<globally-unique> -var github_repo=3thanHead/storefront-ai
-   ```
-3. Hand the outputs to Actions (no AWS keys stored anywhere — OIDC):
-   ```bash
-   gh variable set AWS_DEPLOY_ROLE_ARN --body "$(terraform -chdir=infra output -raw deploy_role_arn)"
-   gh variable set SITE_BUCKET         --body "$(terraform -chdir=infra output -raw bucket)"
-   gh variable set CF_DIST_ID          --body "$(terraform -chdir=infra output -raw distribution_id)"
-   ```
-4. Put the `site_url` output into `.env` as `BLOG_BASE_URL` so agent-minted
-   links point at the live site.
-
-## Relationship to iot_ai
-
-The home cluster (HAProxy + Ollama nodes + `edge` tooling) lives in and is
-operated from the `iot_ai` monorepo; this repo consumes it purely as an HTTP
-endpoint (`LLM_BASE_URL`) — free local inference, no shared code. The
-fleet's image node (RTX box, ComfyUI/SD) arrives the same way via
-`IMAGE_BASE_URL`.
