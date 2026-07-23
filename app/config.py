@@ -13,8 +13,15 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # --- LLM (edge-ai / Ollama) ---
+    # The fast workhorse (nano) -- streamed drills, everything by default.
     ollama_base_url: str = "http://192.168.1.111:11434"
     ollama_model: str = "qwen2.5:7b-instruct"
+
+    # Optional "heavy" node for the knowledge-heavy step (category + subreddit
+    # brainstorm): a bigger model on a beefier box (e.g. the 12GB Mac running
+    # qwen2.5:14b). Blank -> that step just uses the workhorse above.
+    ollama_heavy_base_url: str = ""
+    ollama_heavy_model: str = ""
 
     # --- Datastore ---
     database_url: str = "sqlite:///data/storefront.db"

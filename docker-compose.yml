@@ -19,7 +19,9 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b-instruct}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b-instruct}
+      OLLAMA_HEAVY_BASE_URL: ${OLLAMA_HEAVY_BASE_URL:-}
+      OLLAMA_HEAVY_MODEL: ${OLLAMA_HEAVY_MODEL:-}
       DATABASE_URL: ${DATABASE_URL:-sqlite:///data/storefront.db}
       REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID:-}
       REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET:-}

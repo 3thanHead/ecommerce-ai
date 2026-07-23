@@ -35,7 +35,7 @@ _SSE = {"media_type": "text/event-stream", "headers": {"Cache-Control": "no-cach
 class ScoutRequest(BaseModel):
     theme: str = ""
     model: str | None = None
-    n: int = 12
+    n: int = 8
 
 
 class DrillRequest(BaseModel):

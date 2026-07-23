@@ -137,3 +137,12 @@ def parse_json(raw: str) -> dict:
 def get_llm() -> OllamaClient:
     s = get_settings()
     return OllamaClient(s.ollama_base_url, s.ollama_model)
+
+
+def get_heavy_llm() -> OllamaClient:
+    """The bigger model on the heavy node for knowledge-critical steps. Falls
+    back to the workhorse when no heavy node is configured."""
+    s = get_settings()
+    if s.ollama_heavy_base_url:
+        return OllamaClient(s.ollama_heavy_base_url, s.ollama_heavy_model or s.ollama_model)
+    return get_llm()

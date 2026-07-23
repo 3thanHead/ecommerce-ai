@@ -10,7 +10,8 @@ plus the model's live thinking -- so the UI can show it happening.
 """
 import logging
 
-from ..llm import get_llm, parse_json
+from ..config import get_settings
+from ..llm import get_heavy_llm, parse_json
 from ..progress import Steps
 
 log = logging.getLogger(__name__)
@@ -53,8 +54,17 @@ def _clamp(v) -> int:
 
 
 async def find_categories(theme: str = "", model: str | None = None, n: int = 12, emit=None) -> dict:
-    """Return {theme, categories:[...]} ranked least-saturated first. Streams via `emit`."""
-    llm = get_llm()
+    """Return {theme, categories:[...]} ranked least-saturated first. Streams via `emit`.
+
+    Runs on the HEAVY node (bigger model) when one is configured -- category and
+    subreddit brainstorming is where model knowledge matters most. Falls back to
+    the workhorse otherwise. Drills stay on the fast node.
+    """
+    llm = get_heavy_llm()
+    # When a heavy node is configured, its model does stage 1 (ignore the drill
+    # model picker here); otherwise honor the picked/default model.
+    if get_settings().ollama_heavy_base_url:
+        model = None
     s = Steps(emit) if emit else None
     scope = f"Focus on this space: {theme}." if theme.strip() else (
         "No theme given -- range broadly across consumer product categories."

@@ -34,7 +34,7 @@ export function Opportunities({
   const scout = useJob<ScoutResult>();
 
   function find() {
-    if (!scout.running) scout.run("/api/opportunities/stream", { theme, model, n: 12 });
+    if (!scout.running) scout.run("/api/opportunities/stream", { theme, model, n: 8 });
   }
 
   const result = scout.result;

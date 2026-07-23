@@ -137,7 +137,7 @@ export const api = {
     }),
 
   // Stage 1: the button -> ranked category leaderboard.
-  scout: (theme: string, model?: string, n = 12) =>
+  scout: (theme: string, model?: string, n = 8) =>
     req<ScoutResult>("/api/opportunities", {
       method: "POST",
       body: JSON.stringify({ theme, model, n }),
