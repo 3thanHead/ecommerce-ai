@@ -40,7 +40,12 @@ check-llm:
 	@curl -s http://localhost:$(PORT)/api/models | $(PY) -m json.tool || \
 		echo "backend not up? run 'make dev' or 'make run' first"
 
+# Confirm Reddit access (after adding a script app's creds to .env + restart).
+check-reddit:
+	@curl -s http://localhost:$(PORT)/api/reddit/health | $(PY) -m json.tool || \
+		echo "backend not up? run 'make run' first"
+
 build-ui:
 	cd frontend && npm run build
 
-.PHONY: install dev ui run logs stop check-llm build-ui
+.PHONY: install dev ui run logs stop check-llm check-reddit build-ui

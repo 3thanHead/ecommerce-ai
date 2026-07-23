@@ -119,6 +119,31 @@ class RedditClient:
             return await asyncio.to_thread(self._praw_top, subreddit, time_filter, limit)
         return await self._json_top(subreddit, time_filter, limit)
 
+    async def check(self, sub: str = "pics") -> dict:
+        """Diagnostic: does Reddit access actually work from here? Reports the
+        PRAW/OAuth path (if creds present) AND the keyless floor, with real
+        errors -- so after adding a script app you can tell instantly whether
+        oauth.reddit.com is reachable from this box or also IP-blocked."""
+        out: dict = {"has_creds": self.using_api, "user_agent": self.s.reddit_user_agent}
+        if self.using_api:
+            try:
+                hits = await asyncio.to_thread(self._praw_probe, sub)
+                out["praw"] = {"ok": True, "count": len(hits),
+                               "sample": hits[0].title if hits else None}
+            except Exception as e:
+                out["praw"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        try:
+            d = await self.discover([sub], max_pages=1)
+            out["keyless"] = {"ok": bool(d), "count": len(d)}
+        except Exception as e:
+            out["keyless"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        return out
+
+    def _praw_probe(self, sub: str) -> list[Thread]:
+        """Like _praw_top but lets errors propagate (for check())."""
+        subs = self._reddit().subreddit(sub).top(time_filter="week", limit=3)
+        return [self._from_submission(s) for s in subs]
+
     # --- web-discovery backend (always-on floor) --------------------------
 
     async def discover(self, subreddits: list[str], max_pages: int = 5) -> list[Thread]:

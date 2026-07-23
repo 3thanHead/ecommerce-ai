@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .api import chat, opportunities, storefronts
+from .api import chat, opportunities, reddit, storefronts
 from .config import get_settings
 from .db import init_db
 
@@ -35,6 +35,7 @@ app.add_middleware(
 
 app.include_router(chat.router)
 app.include_router(opportunities.router)
+app.include_router(reddit.router)
 app.include_router(storefronts.router)
 
 
