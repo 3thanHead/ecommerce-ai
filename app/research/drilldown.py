@@ -1,18 +1,21 @@
-"""Stage 2 -- drill a category down into real Reddit discussion, then surface
-concrete product opportunities grounded in what people actually talk about.
+"""Stage 2 -- drill a category into real Reddit discussion + its own long-tail
+keywords, then surface concrete product opportunities grounded in both.
 
 This is where the flow touches the network (so stage 1 stays instant): pull real
-threads from the category's subreddits, then have the model read them and name
-specific products to source -- each with a `cj_search_seed`, the phrase Feature 2
-will throw at CJdropshipping to correlate an actual product (info/images/videos).
+threads from the category's subreddits, expand keywords for the category, then
+have the model read it all and name specific products to source -- each with a
+`cj_search_seed` (the phrase Feature 2 throws at CJdropshipping). It also
+re-rates saturation now that it has evidence.
 
-The model also re-checks the category's saturation now that it has real evidence,
-so the leaderboard number can be refined from a guess to an informed read.
+Pass an `emit` callback (app/progress.py) to stream the work as named steps plus
+the model's live thinking, so the UI shows it happening.
 """
 import asyncio
 import logging
 
-from ..llm import get_llm
+from ..llm import get_llm, parse_json
+from ..progress import Steps
+from .keywords import expand_keywords
 from .reddit import Thread, get_reddit
 
 log = logging.getLogger(__name__)
@@ -20,25 +23,26 @@ log = logging.getLogger(__name__)
 MAX_THREADS = 30
 
 _SYS = """You are a product researcher for a dropshipping operator sourcing from
-CJdropshipping. You are given a product category and REAL Reddit threads from the
-communities that category's buyers hang out in. Read what people actually want,
-complain about, and show off, then surface concrete PRODUCTS to source.
+CJdropshipping. You are given a product category, REAL Reddit threads from the
+communities its buyers use, and long-tail keywords people search. Read what
+people actually want, complain about, and show off, then surface concrete
+PRODUCTS to source.
 
 For each opportunity, give a `cj_search_seed`: the short phrase to search on
 CJdropshipping to find a matching product (e.g. "linen cable organizer", not
-"cozy vibes"). Ground every pick in the threads -- cite the thread themes.
+"cozy vibes"). Ground every pick in the threads/keywords.
 
-Also re-rate the category's saturation 0-100 now that you've seen real demand
-signal (0 = wide open, 100 = crowded), and say what changed your mind, if anything.
+Also re-rate the category's saturation 0-100 now that you've seen real signal
+(0 = wide open, 100 = crowded), and say what changed your mind, if anything.
 
 Output JSON only:
 {
   "saturation": 0-100,
-  "saturation_reasoning": "what the threads tell you about crowding",
+  "saturation_reasoning": "what the signals tell you about crowding",
   "opportunities": [
     {
       "product": "the specific product to sell",
-      "rationale": "why the threads support it",
+      "rationale": "why the signals support it",
       "evidence": ["short quote or thread theme that backs it"],
       "cj_search_seed": "phrase to search on CJdropshipping",
       "demand_signal": 0-100
@@ -56,8 +60,6 @@ def _clamp(v) -> int:
 
 
 async def _gather(reddit, subreddits: list[str]) -> tuple[list[Thread], str]:
-    """Real threads for these subreddits: direct where possible, else the Jina
-    page-read floor. Returns (threads, source_note)."""
     subs = [s for s in subreddits if s][:5]
     pooled: dict[str, Thread] = {}
     if reddit.using_api:
@@ -72,7 +74,6 @@ async def _gather(reddit, subreddits: list[str]) -> tuple[list[Thread], str]:
                 pooled[t.id] = t
         if len(pooled) >= 5:
             return list(pooled.values()), "direct"
-    # keyless floor (works even when this box's IP is blocked)
     for t in await reddit.discover(subs, max_pages=5):
         pooled.setdefault(t.id, t)
     return list(pooled.values()), ("discovery" if pooled else "none")
@@ -92,22 +93,50 @@ async def drill(
     subreddits: list[str],
     audience: str = "",
     model: str | None = None,
+    keyword_seed: str = "",
+    emit=None,
 ) -> dict:
-    """Turn one category into Reddit-grounded product opportunities."""
+    """Turn one category into Reddit-grounded product opportunities + keywords."""
     llm = get_llm()
     reddit = get_reddit()
+    s = Steps(emit) if emit else None
+    subs_label = ", ".join(f"r/{x}" for x in subreddits[:5]) or "(none)"
+    seed = keyword_seed or category  # short seed -> real autocomplete hits
 
-    threads, source = await _gather(reddit, subreddits)
-    block = _thread_block(threads)
-
-    user = (
-        f"Category: {category}\n"
-        f"Audience: {audience or '(unspecified)'}\n\n"
-        f"REAL REDDIT THREADS ({len(threads)} from r/{', r/'.join(subreddits[:5])}):\n"
-        f"{block or '(none retrieved -- infer cautiously from the category alone)'}"
+    # Reddit + keywords in parallel.
+    if s:
+        await s.running(f"Reading Reddit: {subs_label}")
+        await s.running(f"Expanding keywords for “{seed}”")
+    (threads, source), keywords = await asyncio.gather(
+        _gather(reddit, subreddits),
+        expand_keywords(seed, limit=20),
     )
+    if s:
+        note = f"{len(threads)} threads" if threads else "blocked — reasoning from the category"
+        await s.done(f"Reading Reddit: {subs_label} → {note}")
+        await s.done(f"Expanding keywords for “{seed}” → {len(keywords)} phrases")
+
+    block = _thread_block(threads)
+    kw_block = ", ".join(k["phrase"] for k in keywords[:20])
+    user = (
+        f"Category: {category}\nAudience: {audience or '(unspecified)'}\n\n"
+        f"REAL REDDIT THREADS ({len(threads)}):\n{block or '(none retrieved)'}\n\n"
+        f"LONG-TAIL KEYWORDS: {kw_block or '(none)'}"
+    )
+    messages = [{"role": "system", "content": _SYS}, {"role": "user", "content": user}]
+
+    label = "Reasoning over the signals to find products"
     try:
-        data = await llm.json(_SYS, user, model=model, temperature=0.4)
+        if s:
+            await s.running(label)
+            raw = ""
+            async for chunk in llm.chat_stream(messages, model=model, temperature=0.4):
+                raw += chunk
+                await s.thought(chunk)
+            data = parse_json(raw)
+            await s.done(label)
+        else:
+            data = await llm.json(_SYS, user, model=model, temperature=0.4)
     except Exception as e:
         log.warning("drill failed (%s)", e)
         data = {}
@@ -117,9 +146,8 @@ async def drill(
         if not isinstance(o, dict) or not o.get("product"):
             continue
         o["demand_signal"] = _clamp(o.get("demand_signal"))
-        for k in ("evidence",):
-            if not isinstance(o.get(k), list):
-                o[k] = []
+        if not isinstance(o.get("evidence"), list):
+            o["evidence"] = []
         o.setdefault("cj_search_seed", o["product"])
         opps.append(o)
 
@@ -130,5 +158,6 @@ async def drill(
         "saturation": _clamp(data.get("saturation")) if isinstance(data, dict) else 50,
         "saturation_reasoning": data.get("saturation_reasoning", "") if isinstance(data, dict) else "",
         "opportunities": opps,
+        "keywords": keywords,
         "threads_sampled": [t.dict() for t in sorted(threads, key=lambda x: x.score, reverse=True)[:MAX_THREADS]],
     }

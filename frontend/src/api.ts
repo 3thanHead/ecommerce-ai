@@ -17,12 +17,15 @@ export type Thread = {
   permalink: string;
 };
 
+export type Keyword = { phrase: string; freq: number };
+
 export type Drill = {
   category: string;
   reddit_source: string; // direct | discovery | none
   saturation: number;
   saturation_reasoning: string;
   opportunities: Opportunity[];
+  keywords: Keyword[];
   threads_sampled: Thread[];
 };
 
@@ -32,9 +35,46 @@ export type Category = {
   saturation: number;
   saturation_reasoning: string;
   angle: string;
+  keyword_seed?: string;
   subreddits: string[];
   drill?: Drill;
 };
+
+// One SSE frame from a streaming endpoint (see app/progress.py).
+export type SSEEvent =
+  | { type: "step"; name: string; status: "running" | "done" }
+  | { type: "thought"; text: string }
+  | { type: "result"; data: any }
+  | { type: "error"; message: string };
+
+// POST + read a text/event-stream response, invoking onEvent per frame.
+export async function stream(
+  path: string,
+  body: unknown,
+  onEvent: (e: SSEEvent) => void,
+): Promise<void> {
+  const r = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok || !r.body) throw new Error(`${r.status} ${r.statusText}`);
+  const reader = r.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i: number;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const frame = buf.slice(0, i);
+      buf = buf.slice(i + 2);
+      const line = frame.split("\n").find((l) => l.startsWith("data: "));
+      if (line) onEvent(JSON.parse(line.slice(6)));
+    }
+  }
+}
 
 export type ScoutResult = {
   run_id: number;

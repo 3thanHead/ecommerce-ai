@@ -2,16 +2,16 @@
 
 Hit a button (optionally with a broad theme) and the model brainstorms concrete
 product categories, rating each for saturation and ranking the LEAST saturated
-first. This is fast and organic: one model call, no keyword expansion, no network
--- just the model's judgment of where the crowded-vs-open space is. Grounding in
-real Reddit evidence happens later, on drill-down (see [drilldown.py]).
+first. Fast and organic: one model call, no keyword lists, no network. Grounding
+in real Reddit evidence + per-category keywords happens on drill-down.
 
-Each category carries the subreddits to dig into next, so stage 2 knows where to
-look without asking the model again.
+Pass an `emit` callback (see app/progress.py) to stream the work -- named steps
+plus the model's live thinking -- so the UI can show it happening.
 """
 import logging
 
-from ..llm import get_llm
+from ..llm import get_llm, parse_json
+from ..progress import Steps
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +37,7 @@ Output JSON only:
       "saturation": 0-100,
       "saturation_reasoning": "one honest sentence on why that number",
       "angle": "the wedge -- why a new store can win here right now",
+      "keyword_seed": "a SHORT 1-3 word shopping term for autocomplete (e.g. 'standing desk', not the long category name)",
       "subreddits": ["3-5 REAL subreddit names (no r/ prefix) where this audience actually gathers"]
     }
   ]
@@ -51,16 +52,29 @@ def _clamp(v) -> int:
         return 50
 
 
-async def find_categories(theme: str = "", model: str | None = None, n: int = 12) -> dict:
-    """Return {theme, categories:[...]} ranked least-saturated first."""
+async def find_categories(theme: str = "", model: str | None = None, n: int = 12, emit=None) -> dict:
+    """Return {theme, categories:[...]} ranked least-saturated first. Streams via `emit`."""
     llm = get_llm()
+    s = Steps(emit) if emit else None
     scope = f"Focus on this space: {theme}." if theme.strip() else (
         "No theme given -- range broadly across consumer product categories."
     )
     user = f"{scope}\nReturn {n} categories."
+    messages = [{"role": "system", "content": _SYS}, {"role": "user", "content": user}]
 
+    label = f"Brainstorming {n} product categories"
     try:
-        data = await llm.json(_SYS, user, model=model, temperature=0.6)
+        if s:
+            await s.done(f"Connected to edge-ai ({model or llm.default_model})")
+            await s.running(label)
+            raw = ""
+            async for chunk in llm.chat_stream(messages, model=model, temperature=0.6):
+                raw += chunk
+                await s.thought(chunk)
+            data = parse_json(raw)
+            await s.done(label)
+        else:
+            data = await llm.json(_SYS, user, model=model, temperature=0.6)
     except Exception as e:
         log.warning("category scout failed (%s)", e)
         data = {"categories": []}
@@ -72,6 +86,11 @@ async def find_categories(theme: str = "", model: str | None = None, n: int = 12
         c["saturation"] = _clamp(c.get("saturation"))
         if not isinstance(c.get("subreddits"), list):
             c["subreddits"] = []
+        # Short seed for keyword autocomplete; long category names return nothing.
+        if not c.get("keyword_seed"):
+            c["keyword_seed"] = c["name"]
         cats.append(c)
     cats.sort(key=lambda c: c["saturation"])  # least saturated first
+    if s:
+        await s.done(f"Ranked {len(cats)} categories by saturation")
     return {"theme": theme, "model": model or llm.default_model, "categories": cats}

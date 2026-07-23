@@ -1,3 +1,3 @@
-from .ollama import OllamaClient, get_llm
+from .ollama import OllamaClient, get_llm, parse_json
 
-__all__ = ["OllamaClient", "get_llm"]
+__all__ = ["OllamaClient", "get_llm", "parse_json"]

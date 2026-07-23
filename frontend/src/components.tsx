@@ -19,3 +19,26 @@ export function Meter({ label, value, invert }: { label: string; value: number; 
 export function Banner({ children }: { children: React.ReactNode }) {
   return <div className="banner">{children}</div>;
 }
+
+import type { Step } from "./useJob";
+
+// The "show the work" panel: a live checklist of steps + the model's streamed
+// thinking (collapsed by default). Reads like Claude Code's activity log.
+export function Working({ steps, thinking }: { steps: Step[]; thinking: string }) {
+  return (
+    <div className="working">
+      {steps.map((s, i) => (
+        <div key={i} className={`wstep ${s.status}`}>
+          <span className="wicon">{s.status === "done" ? "✓" : "◐"}</span>
+          {s.name}
+        </div>
+      ))}
+      {thinking && (
+        <details className="thinking">
+          <summary>model thinking…</summary>
+          <pre>{thinking}</pre>
+        </details>
+      )}
+    </div>
+  );
+}

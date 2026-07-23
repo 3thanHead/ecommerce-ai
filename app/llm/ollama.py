@@ -68,6 +68,32 @@ class OllamaClient:
             content = r.json()["message"]["content"]
         return _strip_think(content)
 
+    async def chat_stream(
+        self,
+        messages: list[dict],
+        model: str | None = None,
+        temperature: float = 0.7,
+    ):
+        """Yield assistant text chunks as they generate. Nothing is stripped here
+        -- callers that want to SHOW the model working forward every chunk
+        (including <think>…</think>); callers that want the answer accumulate the
+        chunks and _strip_think() at the end. See parse_json_stream below."""
+        payload = {
+            "model": model or self.default_model,
+            "messages": messages,
+            "stream": True,
+            "options": {"temperature": temperature},
+        }
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with client.stream("POST", f"{self.base_url}/api/chat", json=payload) as r:
+                r.raise_for_status()
+                async for line in r.aiter_lines():
+                    if not line.strip():
+                        continue
+                    piece = json.loads(line).get("message", {}).get("content", "")
+                    if piece:
+                        yield piece
+
     async def json(
         self,
         system: str,
@@ -92,6 +118,20 @@ class OllamaClient:
                 return json.loads(raw[start : end + 1])
             log.warning("LLM returned non-JSON: %s", raw[:200])
             raise
+
+
+def parse_json(raw: str) -> dict:
+    """Parse a model's (possibly think-wrapped, possibly fenced) reply into a
+    dict. Used by streaming callers that accumulated chunks themselves."""
+    text = _strip_think(raw)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        start, end = text.find("{"), text.rfind("}")
+        if 0 <= start < end:
+            return json.loads(text[start : end + 1])
+        log.warning("LLM returned non-JSON: %s", text[:200])
+        raise
 
 
 def get_llm() -> OllamaClient:

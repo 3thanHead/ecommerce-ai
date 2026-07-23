@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { api, Category, Drill, ScoutResult } from "../api";
-import { Banner, Meter } from "../components";
+import { Banner, Meter, Working } from "../components";
+import { useJob } from "../useJob";
 
-// The whole flow on one screen: hit the button -> categories ranked least
-// saturated first -> drill any one into Reddit -> promote to a storefront.
+// The whole flow: hit the button -> watch the model rank categories least
+// saturated first -> drill or fully automate any one, watching it work.
 export function Opportunities({
   model,
   onPromoted,
@@ -12,57 +13,13 @@ export function Opportunities({
   onPromoted: () => void;
 }) {
   const [theme, setTheme] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const [scout, setScout] = useState<ScoutResult | null>(null);
-  const [open, setOpen] = useState<number | null>(null);
-  const [drills, setDrills] = useState<Record<number, Drill>>({});
-  const [drilling, setDrilling] = useState<number | null>(null);
-  const [promoted, setPromoted] = useState<Record<number, string>>({});
+  const scout = useJob<ScoutResult>();
 
-  async function find() {
-    if (busy) return;
-    setBusy(true);
-    setErr("");
-    setScout(null);
-    setDrills({});
-    setPromoted({});
-    setOpen(null);
-    try {
-      setScout(await api.scout(theme, model));
-    } catch (e: any) {
-      setErr(e.message);
-    } finally {
-      setBusy(false);
-    }
+  function find() {
+    if (!scout.running) scout.run("/api/opportunities/stream", { theme, model, n: 12 });
   }
 
-  async function drill(i: number) {
-    if (!scout) return;
-    setOpen(open === i ? null : i);
-    if (drills[i] || drilling !== null) return;
-    setDrilling(i);
-    setErr("");
-    try {
-      const d = await api.drill(scout.run_id, i, model);
-      setDrills((prev) => ({ ...prev, [i]: d }));
-    } catch (e: any) {
-      setErr(e.message);
-    } finally {
-      setDrilling(null);
-    }
-  }
-
-  async function promote(i: number) {
-    if (!scout) return;
-    try {
-      const r = await api.promote(scout.run_id, i);
-      setPromoted((p) => ({ ...p, [i]: r.slug }));
-      onPromoted();
-    } catch (e: any) {
-      setErr(e.message);
-    }
-  }
+  const result = scout.result;
 
   return (
     <>
@@ -77,109 +34,192 @@ export function Opportunities({
               onKeyDown={(e) => e.key === "Enter" && find()}
             />
           </div>
-          <button className="primary" onClick={find} disabled={busy}>
-            {busy ? "Scouting…" : "Find opportunities"}
+          <button className="primary" onClick={find} disabled={scout.running}>
+            {scout.running ? "Scouting…" : "Find opportunities"}
           </button>
         </div>
-        {busy && (
-          <div className="spinner" style={{ marginTop: 10 }}>
-            {model} is ranking categories by saturation…
+        {(scout.running || (!result && scout.steps.length > 0)) && (
+          <div style={{ marginTop: 12 }}>
+            <Working steps={scout.steps} thinking={scout.thinking} />
           </div>
         )}
-        {!scout && !busy && (
+        {!result && !scout.running && scout.steps.length === 0 && (
           <p className="muted" style={{ marginBottom: 0 }}>
-            Ranked least-saturated first. Click a category to drill into Reddit
-            for concrete products to source.
+            Ranked least-saturated first. Drill a category into Reddit for products
+            to source, or hit <b>Automate</b> to build its storefront in one go.
           </p>
         )}
       </div>
 
-      {err && <Banner>{err}</Banner>}
+      {scout.error && <Banner>{scout.error}</Banner>}
 
-      {scout &&
-        scout.categories.map((c: Category, i: number) => {
-          const d = drills[i];
-          const isOpen = open === i;
-          return (
-            <div className="card" key={i}>
-              <div
-                className="row"
-                style={{ justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
-                onClick={() => drill(i)}
-              >
-                <div style={{ flex: 1 }}>
-                  <div className="row" style={{ alignItems: "center", gap: 14 }}>
-                    <Meter label="saturation" value={d ? d.saturation : c.saturation} invert />
-                    <h3 style={{ margin: 0, fontSize: 16 }}>{c.name}</h3>
-                  </div>
-                  <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                    {c.audience}
-                  </div>
-                </div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  {c.subreddits.slice(0, 3).map((s) => (
-                    <span className="pill" key={s}>
-                      r/{s}
-                    </span>
-                  ))}
-                  <span style={{ marginLeft: 8 }}>{isOpen ? "▲" : "▼ drill"}</span>
-                </div>
+      {result &&
+        result.categories.map((c, i) => (
+          <CategoryCard
+            key={i}
+            category={c}
+            runId={result.run_id}
+            index={i}
+            model={model}
+            onPromoted={onPromoted}
+          />
+        ))}
+    </>
+  );
+}
+
+function CategoryCard({
+  category: c,
+  runId,
+  index,
+  model,
+  onPromoted,
+}: {
+  category: Category;
+  runId: number;
+  index: number;
+  model: string;
+  onPromoted: () => void;
+}) {
+  const job = useJob<any>();
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"drill" | "automate" | null>(null);
+  const [promotedSlug, setPromotedSlug] = useState("");
+
+  // The drill data can come from a drill run (result IS the drill) or an
+  // automate run (result.drill).
+  const drill: Drill | null = job.result
+    ? job.result.opportunities
+      ? job.result
+      : job.result.drill ?? null
+    : null;
+  const automatedSlug: string | undefined = job.result?.slug;
+
+  function start(which: "drill" | "automate") {
+    setOpen(true);
+    setMode(which);
+    setPromotedSlug("");
+    const path =
+      which === "drill"
+        ? "/api/opportunities/drill/stream"
+        : "/api/opportunities/automate/stream";
+    job.run(path, { run_id: runId, category_index: index, model }).then(() => {
+      if (which === "automate") onPromoted();
+    });
+  }
+
+  async function promote() {
+    try {
+      const r = await api.promote(runId, index);
+      setPromotedSlug(r.slug);
+      onPromoted();
+    } catch {
+      /* surfaced elsewhere */
+    }
+  }
+
+  const sat = drill ? drill.saturation : c.saturation;
+
+  return (
+    <div className="card">
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ flex: 1 }}>
+          <div className="row" style={{ alignItems: "center", gap: 14 }}>
+            <Meter label="saturation" value={sat} invert />
+            <h3 style={{ margin: 0, fontSize: 16 }}>{c.name}</h3>
+          </div>
+          <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
+            {c.audience}
+          </div>
+          <div style={{ marginTop: 6 }}>
+            {c.subreddits.slice(0, 4).map((s) => (
+              <span className="pill" key={s}>
+                r/{s}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="ghost" disabled={job.running} onClick={() => start("drill")}>
+            Drill
+          </button>
+          <button className="primary" disabled={job.running} onClick={() => start("automate")}>
+            {mode === "automate" && job.running ? "Automating…" : "Automate"}
+          </button>
+        </div>
+      </div>
+
+      {open && (
+        <div style={{ marginTop: 14, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+          <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+            <b>Angle:</b> {c.angle}
+          </p>
+
+          {(job.running || job.steps.length > 0) && (
+            <Working steps={job.steps} thinking={job.thinking} />
+          )}
+          {job.error && <Banner>{job.error}</Banner>}
+
+          {drill && (
+            <div style={{ marginTop: 12 }}>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+                {drill.reddit_source === "none" ? (
+                  <span style={{ color: "var(--warn)" }}>
+                    ⚠ Reddit unreachable — products from category + keyword
+                    reasoning only. Add a Reddit script app for grounded results.
+                  </span>
+                ) : (
+                  <>grounded in {drill.threads_sampled.length} Reddit threads ({drill.reddit_source})</>
+                )}
               </div>
 
-              {isOpen && (
-                <div style={{ marginTop: 14, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
-                  <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
-                    <b>Angle:</b> {c.angle}
-                  </p>
+              {drill.opportunities.map((o, j) => (
+                <div key={j} className="thread" style={{ paddingBottom: 10 }}>
+                  <div className="row" style={{ justifyContent: "space-between" }}>
+                    <b>{o.product}</b>
+                    <span className="meter">
+                      <span className="muted">demand</span> <b>{o.demand_signal}</b>
+                    </span>
+                  </div>
+                  <div className="muted" style={{ fontSize: 13, margin: "3px 0" }}>
+                    {o.rationale}
+                  </div>
+                  <span className="pill">CJ search: {o.cj_search_seed}</span>
+                </div>
+              ))}
 
-                  {drilling === i && <div className="spinner">reading Reddit + reasoning…</div>}
-
-                  {d && (
-                    <>
-                      <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                        {d.reddit_source === "none" ? (
-                          <span style={{ color: "var(--warn)" }}>
-                            ⚠ Reddit unreachable — opportunities from category
-                            reasoning only. Add a Reddit script app for grounded results.
-                          </span>
-                        ) : (
-                          <>grounded in {d.threads_sampled.length} Reddit threads ({d.reddit_source})</>
-                        )}
-                      </div>
-
-                      {d.opportunities.map((o, j) => (
-                        <div key={j} className="thread" style={{ paddingBottom: 10 }}>
-                          <div className="row" style={{ justifyContent: "space-between" }}>
-                            <b>{o.product}</b>
-                            <span className="meter">
-                              <span className="muted">demand</span> <b>{o.demand_signal}</b>
-                            </span>
-                          </div>
-                          <div className="muted" style={{ fontSize: 13, margin: "3px 0" }}>
-                            {o.rationale}
-                          </div>
-                          <span className="pill">CJ search: {o.cj_search_seed}</span>
-                        </div>
-                      ))}
-
-                      <div style={{ marginTop: 12 }}>
-                        <button
-                          className="primary"
-                          disabled={!!promoted[i]}
-                          onClick={() => promote(i)}
-                        >
-                          {promoted[i]
-                            ? `✓ storefront /${promoted[i]} created`
-                            : `Create storefront + ${d.opportunities.length} products`}
-                        </button>
-                      </div>
-                    </>
-                  )}
+              {drill.keywords.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <label>Keywords for this category ({drill.keywords.length})</label>
+                  <div>
+                    {drill.keywords.slice(0, 16).map((k) => (
+                      <span className="pill" key={k.phrase}>
+                        {k.phrase}
+                        {k.freq > 1 && <span className="muted"> ·{k.freq}</span>}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
+
+              <div style={{ marginTop: 14 }}>
+                {automatedSlug ? (
+                  <span style={{ color: "var(--good)" }}>
+                    ✓ storefront <b>/{automatedSlug}</b> built with{" "}
+                    {job.result.products_seeded} products
+                  </span>
+                ) : promotedSlug ? (
+                  <span style={{ color: "var(--good)" }}>✓ storefront /{promotedSlug} created</span>
+                ) : (
+                  <button className="primary" onClick={promote}>
+                    Create storefront + {drill.opportunities.length} products
+                  </button>
+                )}
+              </div>
             </div>
-          );
-        })}
-    </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
