@@ -1,57 +1,62 @@
 # storefront-ai
 
-Turn a category or chat prompt into **product niches** — researched from real
-Reddit discussion + keyword demand, rated for saturation by a local LLM — then
-manage the storefronts those niches become. Generation runs on your **edge-ai**
-Ollama box (free, local); this app just orchestrates and stores.
+Hit a button and get **product categories ranked least-saturated first**, then
+**drill any one into Reddit** to surface concrete products to source — each with
+a search seed for CJdropshipping. Promote a category and it becomes a storefront
+with those products queued up. Generation runs on your **edge-ai** Ollama box
+(free, local); this app just orchestrates and stores.
 
-Being built **feature by feature**. What works today:
+Built **feature by feature**. Working today:
 
-- **Feature 1 — niche research agent.** One prompt → the model plans where to
-  look → real Reddit threads + Google-autocomplete keyword demand → the model
-  synthesizes niche candidates, each with a demand score and a **saturation
-  rating it has to justify**. Promote a candidate to create a storefront.
-- **LLM connection.** One Ollama endpoint, model chosen per request. Nothing
-  more — point `OLLAMA_BASE_URL` at edge-ai (or a local Ollama) and go.
+- **The button → category leaderboard.** One model call ranks product categories
+  by saturation (least crowded first), each with its audience, the winning
+  angle, and the subreddits to dig into. Fast and organic — no keyword lists.
+- **Drill-down.** Click a category → the agent pulls real Reddit threads from its
+  communities and names specific products to sell, each with a `cj_search_seed`.
+- **Promote → storefront.** A category becomes a storefront; its drilled products
+  become candidates carrying the CJ seed.
+- **LLM connection.** One Ollama endpoint, model chosen per request. Point
+  `OLLAMA_BASE_URL` at edge-ai (or a local Ollama) and go.
 
-Later: CJdropshipping product matching (info/images/videos) → products on the
-storefronts (Feature 2); publishing.
+**Next (Feature 2):** resolve each `cj_search_seed` against CJdropshipping to
+attach a real product — info, images, videos.
 
-## Architecture
+## Flow
 
 ```
-you ─► React admin (Vite)
-          │  /api
-          ▼
-     FastAPI backend ──► research agent ──┬─► Reddit (3 backends, degrade in order)
-          │                               ├─► Google Suggest (keyword demand)
-          │                               └─► edge-ai / Ollama  [the model]
-          ▼
-     SQLite (storefronts, niches, products, runs)
+        [ Find opportunities ]            ← button (optional broad theme)
+                 │  the model ranks categories by saturation
+                 ▼
+   category leaderboard  (least saturated first)
+                 │  click one → drill
+                 ▼
+   Reddit threads ──► concrete products + cj_search_seed   ← grounded in discussion
+                 │  promote
+                 ▼
+   storefront + product candidates  ──►  (Feature 2) CJdropshipping match
 ```
 
-Deliberately small: SQLite (one file), one backend service, one AI endpoint.
+Stage 1 is instant and offline (pure model judgment). Only drill-down touches
+the network, so the leaderboard never waits on Reddit.
 
-## The Reddit path (why three backends)
+## The Reddit path (and its honest limits)
 
-Research reads Reddit through one interface that degrades:
+Drill-down reads Reddit through one interface that degrades:
 
-1. **PRAW read-only** — used when `REDDIT_CLIENT_ID/SECRET` are set. Structured
-   signals (score, comments, upvote ratio), ToS-compliant, ~100 req/min. Register
-   a **"script" app** at reddit.com/prefs/apps — instant, no approval queue
-   (that gate is only the *commercial* Data API).
-2. **Public `.json` endpoints** — no key, full signals *when they work*. Reddit
-   now 403-blocks these from many IPs.
-3. **Jina page-read** (always-on floor) — `r.jina.ai` reads a subreddit's `/top`
-   listing **server-side**, so it works even when 1 and 2 are blocked from your
-   box. Titles + subreddits are real; engagement numbers aren't in the page, so
-   scores show as 0. This keeps research alive with zero credentials.
+1. **PRAW read-only** — used when `REDDIT_CLIENT_ID/SECRET` are set. Real
+   structured signals (score, comments), ToS-compliant, hits `oauth.reddit.com`
+   (the sanctioned path, not the blocked public web). **This is the reliable
+   way to ground drill-downs.** Register a **"script" app** at
+   reddit.com/prefs/apps — instant, no approval queue (that gate is only the
+   *commercial* Data API).
+2. **Public `.json`** — no key, full signals when it works.
+3. **Jina page-read** — `r.jina.ai` reads Reddit pages server-side.
 
-Posting is never automated — the agent drafts content for you to post manually.
-
-> **Better signals:** add a Reddit script app (path 1) and/or point
-> `OLLAMA_MODEL` at a larger model — a small 4B model sometimes invents
-> subreddit names, which the discovery filter simply drops.
+> **Reality check:** Reddit aggressively 403-blocks the keyless paths (2 and 3)
+> — often from residential IPs *and* Jina's servers. When that happens the drill
+> falls back to category reasoning only and the UI says so. **Add a Reddit
+> script app (path 1) for dependable grounding.** Posting is never automated —
+> the agent drafts; you post.
 
 ## Quick start
 
@@ -59,18 +64,13 @@ Posting is never automated — the agent drafts content for you to post manually
 cp .env.example .env          # set OLLAMA_BASE_URL + OLLAMA_MODEL
 make install                  # python venv + npm deps
 
-# two terminals:
-make dev                      # backend  :8820
-make ui                       # admin UI :5173  -> open this
+make dev                      # backend  :8820   (terminal 1)
+make ui                       # admin UI :5173   (terminal 2) -> open this
 
 make check-llm                # confirm the edge-ai connection + list models
 ```
 
-Docker (backend only; UI via `make ui`):
-
-```bash
-make run                      # docker compose up -d --build
-```
+Docker (backend; UI via `make ui`): `make run`.
 
 ## Config (`.env`)
 
@@ -79,20 +79,21 @@ make run                      # docker compose up -d --build
 | `OLLAMA_BASE_URL` | edge-ai box, e.g. `http://192.168.1.111:11434` |
 | `OLLAMA_MODEL` | default model (any you've pulled there) |
 | `DATABASE_URL` | SQLite path (default `sqlite:///data/storefront.db`) |
-| `REDDIT_CLIENT_ID` / `_SECRET` | optional; enables the PRAW path |
+| `REDDIT_CLIENT_ID` / `_SECRET` | optional; enables reliable PRAW grounding |
 | `JINA_READER_BASE` | keyless page reader (default `https://r.jina.ai`) |
 
 ## Layout
 
 ```
-backend/app/
-  llm/ollama.py        the whole AI connection (one endpoint, per-call model)
+app/
+  llm/ollama.py          the whole AI connection (one endpoint, per-call model)
   research/
-    reddit.py          3-backend Reddit client (PRAW / .json / Jina)
-    keywords.py        Google Suggest keyword expansion
-    web.py             keyless page reader (Jina) + web search
-    agent.py           plan → gather → judge (saturation reasoning)
-  api/                 chat, research, storefronts
-  models.py            Storefront / Niche / Product / ResearchRun (SQLite)
-frontend/src/          React admin: Research, Storefronts, Chat
+    categories.py        stage 1 — brainstorm + saturation-rank the leaderboard
+    drilldown.py         stage 2 — category → Reddit threads → products + CJ seed
+    reddit.py            Reddit client (PRAW / .json / Jina page-read)
+    web.py               keyless page reader (Jina)
+  api/                   chat, opportunities, storefronts
+  models.py              Storefront / Product / Niche / ResearchRun (SQLite)
+frontend/src/            React admin: Opportunities, Storefronts, Chat
+infra/                   Terraform (AWS deploy — later)
 ```

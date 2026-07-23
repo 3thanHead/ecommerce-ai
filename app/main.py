@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .api import chat, research, storefronts
+from .api import chat, opportunities, storefronts
 from .config import get_settings
 from .db import init_db
 
@@ -34,7 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(chat.router)
-app.include_router(research.router)
+app.include_router(opportunities.router)
 app.include_router(storefronts.router)
 
 
@@ -45,6 +45,6 @@ def health():
 
 # Serve the built SPA if it exists (prod single-container). Mounted last so it
 # doesn't shadow /api routes.
-_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 if _dist.is_dir():
     app.mount("/", StaticFiles(directory=str(_dist), html=True), name="spa")

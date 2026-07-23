@@ -2,13 +2,13 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { Banner } from "./components";
 import { Chat } from "./pages/Chat";
-import { Research } from "./pages/Research";
+import { Opportunities } from "./pages/Opportunities";
 import { Storefronts } from "./pages/Storefronts";
 
-type Tab = "research" | "storefronts" | "chat";
+type Tab = "opportunities" | "storefronts" | "chat";
 
 export function App() {
-  const [tab, setTab] = useState<Tab>("research");
+  const [tab, setTab] = useState<Tab>("opportunities");
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState("");
   const [fleetErr, setFleetErr] = useState("");
@@ -43,7 +43,7 @@ export function App() {
           </select>
         </span>
         <nav>
-          {(["research", "storefronts", "chat"] as Tab[]).map((t) => (
+          {(["opportunities", "storefronts", "chat"] as Tab[]).map((t) => (
             <button
               key={t}
               className={tab === t ? "active" : ""}
@@ -61,8 +61,8 @@ export function App() {
         </Banner>
       )}
 
-      {tab === "research" && (
-        <Research model={model} onPromoted={() => setStoreRefresh((n) => n + 1)} />
+      {tab === "opportunities" && (
+        <Opportunities model={model} onPromoted={() => setStoreRefresh((n) => n + 1)} />
       )}
       {tab === "storefronts" && <Storefronts refreshKey={storeRefresh} />}
       {tab === "chat" && <Chat model={model} />}

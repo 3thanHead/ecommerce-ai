@@ -22,3 +22,6 @@ frontend/.vite/
 .DS_Store
 .idea/
 .vscode/
+
+# TS incremental build info
+*.tsbuildinfo

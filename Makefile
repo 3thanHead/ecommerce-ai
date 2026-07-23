@@ -14,11 +14,11 @@ PORT ?= 8820
 install:
 	python3 -m venv .venv
 	$(PIP) install -q --upgrade pip
-	$(PIP) install -q -r backend/requirements.txt
+	$(PIP) install -q -r requirements.txt
 	cd frontend && npm install
 
 dev:
-	cd backend && ../.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port $(PORT)
+	.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port $(PORT)
 
 ui:
 	cd frontend && npm run dev

@@ -1,15 +1,12 @@
 // One tiny fetch wrapper. Everything is a relative /api call so it works the
 // same in dev (Vite proxy) and prod (served by FastAPI).
 
-export type Candidate = {
-  name: string;
-  audience: string;
+export type Opportunity = {
+  product: string;
   rationale: string;
-  demand: number;
-  saturation: number;
-  saturation_reasoning: string;
-  example_products: string[];
-  keywords: string[];
+  evidence: string[];
+  cj_search_seed: string;
+  demand_signal: number;
 };
 
 export type Thread = {
@@ -17,20 +14,33 @@ export type Thread = {
   title: string;
   subreddit: string;
   score: number;
-  num_comments: number;
   permalink: string;
 };
 
-export type ResearchResult = {
-  run_id: number;
-  prompt: string;
-  audience: string;
-  model: string;
+export type Drill = {
+  category: string;
   reddit_source: string; // direct | discovery | none
-  summary: string;
-  candidates: Candidate[];
+  saturation: number;
+  saturation_reasoning: string;
+  opportunities: Opportunity[];
   threads_sampled: Thread[];
-  keywords: { phrase: string; freq: number }[];
+};
+
+export type Category = {
+  name: string;
+  audience: string;
+  saturation: number;
+  saturation_reasoning: string;
+  angle: string;
+  subreddits: string[];
+  drill?: Drill;
+};
+
+export type ScoutResult = {
+  run_id: number;
+  theme: string;
+  model: string;
+  categories: Category[];
 };
 
 export type Storefront = {
@@ -64,24 +74,28 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ messages, model }),
     }),
-  research: (prompt: string, audience: string, model?: string) =>
-    req<ResearchResult>("/api/research", {
+
+  // Stage 1: the button -> ranked category leaderboard.
+  scout: (theme: string, model?: string, n = 12) =>
+    req<ScoutResult>("/api/opportunities", {
       method: "POST",
-      body: JSON.stringify({ prompt, audience, model }),
+      body: JSON.stringify({ theme, model, n }),
     }),
-  runs: () =>
-    req<{ id: number; prompt: string; audience: string; candidates: number }[]>(
-      "/api/research",
-    ),
-  getRun: (id: number) => req<ResearchResult>(`/api/research/${id}`),
-  promote: (run_id: number, candidate_index: number) =>
-    req<{ niche_id: number; storefront_id: number | null }>(
-      "/api/research/promote",
+  // Stage 2: drill one category into Reddit -> product opportunities.
+  drill: (run_id: number, category_index: number, model?: string) =>
+    req<Drill>("/api/opportunities/drill", {
+      method: "POST",
+      body: JSON.stringify({ run_id, category_index, model }),
+    }),
+  // Category -> storefront (+ seeded product candidates if drilled).
+  promote: (run_id: number, category_index: number) =>
+    req<{ storefront_id: number; slug: string; products_seeded: number }>(
+      "/api/opportunities/promote",
       {
         method: "POST",
-        body: JSON.stringify({ run_id, candidate_index, create_storefront: true }),
+        body: JSON.stringify({ run_id, category_index }),
       },
     ),
+
   storefronts: () => req<Storefront[]>("/api/storefronts"),
-  storefront: (id: number) => req<any>(`/api/storefronts/${id}`),
 };

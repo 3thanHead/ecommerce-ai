@@ -8,7 +8,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: Dockerfile
     image: storefront-ai
     ports:
       - "${PORT:-8820}:8820"
