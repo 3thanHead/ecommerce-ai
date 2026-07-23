@@ -16,8 +16,10 @@ Pass `emit` to stream the work.
 import asyncio
 import logging
 
+from ..config import get_settings
 from ..llm import get_llm, parse_json
 from ..progress import Steps
+from . import saturation as sat
 from . import subreddits as sr
 from .keywords import expand_keywords
 
@@ -51,6 +53,43 @@ Output JSON only:
   ]
 }
 Return 3-6 opportunities, strongest first."""
+
+
+# Schema-constrained output -> valid JSON by construction (no empty results).
+_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "saturation": {"type": "integer"},
+        "saturation_reasoning": {"type": "string"},
+        "subreddits": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "product_friendly": {"type": "string", "enum": ["yes", "limited", "no"]},
+                    "reason": {"type": "string"},
+                },
+                "required": ["name", "product_friendly", "reason"],
+            },
+        },
+        "opportunities": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "product": {"type": "string"},
+                    "rationale": {"type": "string"},
+                    "evidence": {"type": "array", "items": {"type": "string"}},
+                    "cj_search_seed": {"type": "string"},
+                    "demand_signal": {"type": "integer"},
+                },
+                "required": ["product", "rationale", "cj_search_seed", "demand_signal"],
+            },
+        },
+    },
+    "required": ["saturation", "subreddits", "opportunities"],
+}
 
 
 def _clamp(v) -> int:
@@ -87,6 +126,16 @@ async def drill(
     if s:
         await s.done(f"Expanded keywords for “{seed}” → {len(keywords)} phrases")
 
+    # Measured saturation (real supply counts) -- overrides the model's estimate
+    # when a supply provider is configured; degrades to it silently otherwise.
+    settings = get_settings()
+    if s and (settings.has_cj or settings.has_ebay):
+        await s.running(f"Measuring supply for “{seed}” (real saturation)")
+    sat_result = await sat.measure(seed, keywords)
+    if s and sat_result["measured"]:
+        supply_str = ", ".join(f"{k} {v}" for k, v in sat_result["supply"].items())
+        await s.done(f"Measured saturation → {sat_result['saturation']}/100 (supply: {supply_str})")
+
     profiles = {p["name"]: p for p in grounding["subreddits"]}
     sub_block = "\n".join(
         f"- r/{p['name']} ({p['subscribers'] or '?'} subs, submission_type={p['submission_type'] or '?'}): "
@@ -112,13 +161,13 @@ async def drill(
         if s:
             await s.running(label)
             raw = ""
-            async for chunk in llm.chat_stream(messages, model=model, temperature=0.4):
+            async for chunk in llm.chat_stream(messages, model=model, temperature=0.4, fmt=_SCHEMA):
                 raw += chunk
                 await s.thought(chunk)
             data = parse_json(raw)
             await s.done(label)
         else:
-            data = await llm.json(_SYS, user, model=model, temperature=0.4)
+            data = parse_json(await llm.chat(messages, model=model, temperature=0.4, fmt=_SCHEMA))
     except Exception as e:
         log.warning("drill failed (%s)", e)
         data = {}
@@ -148,12 +197,25 @@ async def drill(
         o.setdefault("cj_search_seed", o["product"])
         opps.append(o)
 
+    model_sat = _clamp(data.get("saturation")) if isinstance(data, dict) else 50
+    model_reason = data.get("saturation_reasoning", "") if isinstance(data, dict) else ""
+    if sat_result["measured"]:
+        supply_str = ", ".join(f"{v:,} on {k}" for k, v in sat_result["supply"].items())
+        saturation = sat_result["saturation"]
+        saturation_reasoning = f"Measured from real supply: {supply_str}."
+    else:
+        saturation = model_sat
+        saturation_reasoning = model_reason
+
     return {
         "category": category,
         "audience": audience,
         "reddit_source": grounding["source"],  # pullpush+arctic | arctic-only | model-only
-        "saturation": _clamp(data.get("saturation")) if isinstance(data, dict) else 50,
-        "saturation_reasoning": data.get("saturation_reasoning", "") if isinstance(data, dict) else "",
+        "saturation": saturation,
+        "saturation_reasoning": saturation_reasoning,
+        "saturation_method": sat_result["method"],  # measured | estimated
+        "saturation_supply": sat_result["supply"],  # {provider: count}
+        "saturation_demand": sat_result["demand"],
         "subreddits": subs_out,
         "opportunities": opps,
         "keywords": keywords,

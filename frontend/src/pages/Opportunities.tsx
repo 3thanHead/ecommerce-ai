@@ -180,7 +180,7 @@ function CategoryCard({
 
           {drill && (
             <div style={{ marginTop: 12 }}>
-              <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
                 {drill.reddit_source === "model-only" ? (
                   <span style={{ color: "var(--warn)" }}>
                     ⚠ Reddit archives quiet — subreddits from the model's knowledge,
@@ -191,6 +191,24 @@ function CategoryCard({
                     grounded via <b>{drill.reddit_source}</b> ·{" "}
                     {drill.posts_sampled.length} real posts
                   </>
+                )}
+              </div>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+                saturation:{" "}
+                {drill.saturation_method === "measured" ? (
+                  <span style={{ color: "var(--good)" }}>
+                    ✓ measured —{" "}
+                    {Object.entries(drill.saturation_supply)
+                      .map(([p, n]) => `${n.toLocaleString()} on ${p}`)
+                      .join(", ")}
+                  </span>
+                ) : (
+                  <span>
+                    estimated by model{" "}
+                    <span title="Add a CJ or eBay key for a measured supply-based score.">
+                      (no supply source configured)
+                    </span>
+                  </span>
                 )}
               </div>
 

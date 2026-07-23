@@ -28,6 +28,11 @@ services:
       REDDIT_USER_AGENT: ${REDDIT_USER_AGENT:-storefront-ai/0.1 (niche research)}
       FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
       JINA_READER_BASE: ${JINA_READER_BASE:-https://r.jina.ai}
+      # Supply counts for measured saturation (optional; degrade to model estimate).
+      CJ_EMAIL: ${CJ_EMAIL:-}
+      CJ_API_KEY: ${CJ_API_KEY:-}
+      EBAY_CLIENT_ID: ${EBAY_CLIENT_ID:-}
+      EBAY_CLIENT_SECRET: ${EBAY_CLIENT_SECRET:-}
     volumes:
       - ./data:/app/data
     restart: unless-stopped

@@ -44,6 +44,9 @@ export type Drill = {
   reddit_source: string; // pullpush+arctic | arctic-only | model-only
   saturation: number;
   saturation_reasoning: string;
+  saturation_method: "measured" | "estimated";
+  saturation_supply: Record<string, number>; // {provider: listing count}
+  saturation_demand: number;
   subreddits: SubredditProfile[];
   opportunities: Opportunity[];
   keywords: Keyword[];

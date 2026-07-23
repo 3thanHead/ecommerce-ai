@@ -46,6 +46,32 @@ Output JSON only:
 Return the requested count, least saturated first."""
 
 
+# Schema-constrained output -> valid JSON by construction (no empty/broken results).
+_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "categories": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "audience": {"type": "string"},
+                    "saturation": {"type": "integer"},
+                    "saturation_reasoning": {"type": "string"},
+                    "angle": {"type": "string"},
+                    "keyword_seed": {"type": "string"},
+                    "subreddits": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["name", "audience", "saturation", "angle",
+                             "keyword_seed", "subreddits"],
+            },
+        }
+    },
+    "required": ["categories"],
+}
+
+
 def _clamp(v) -> int:
     try:
         return max(0, min(100, int(v)))
@@ -78,13 +104,16 @@ async def find_categories(theme: str = "", model: str | None = None, n: int = 12
             await s.done(f"Connected to edge-ai ({model or llm.default_model})")
             await s.running(label)
             raw = ""
-            async for chunk in llm.chat_stream(messages, model=model, temperature=0.6):
+            async for chunk in llm.chat_stream(messages, model=model, temperature=0.6, fmt=_SCHEMA):
                 raw += chunk
                 await s.thought(chunk)
             data = parse_json(raw)
             await s.done(label)
         else:
-            data = await llm.json(_SYS, user, model=model, temperature=0.6)
+            data = await llm.chat([{"role": "system", "content": _SYS},
+                                   {"role": "user", "content": user}],
+                                  model=model, temperature=0.6, fmt=_SCHEMA)
+            data = parse_json(data)
     except Exception as e:
         log.warning("category scout failed (%s)", e)
         data = {"categories": []}

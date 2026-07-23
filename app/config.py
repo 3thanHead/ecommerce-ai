@@ -37,9 +37,24 @@ class Settings(BaseSettings):
     firecrawl_api_key: str = ""
     jina_reader_base: str = "https://r.jina.ai"
 
-    # --- CJdropshipping (Feature 2) ---
+    # --- Supply counts for MEASURED saturation (all optional; degrade to the
+    #     model's estimate when unset) ---
+    # CJdropshipping: # of dropship products per keyword (the most relevant supply
+    # signal) AND the Feature 2 product source. Free account, no card.
     cj_email: str = ""
     cj_api_key: str = ""
+    # eBay Browse API: # of listings per keyword (broad-market supply). Free dev
+    # account -> an application (client id/secret) for the client-credentials token.
+    ebay_client_id: str = ""
+    ebay_client_secret: str = ""
+
+    @property
+    def has_cj(self) -> bool:
+        return bool(self.cj_email and self.cj_api_key)
+
+    @property
+    def has_ebay(self) -> bool:
+        return bool(self.ebay_client_id and self.ebay_client_secret)
 
     @property
     def reddit_has_api(self) -> bool:

@@ -73,17 +73,24 @@ class OllamaClient:
         messages: list[dict],
         model: str | None = None,
         temperature: float = 0.7,
+        fmt=None,
     ):
         """Yield assistant text chunks as they generate. Nothing is stripped here
         -- callers that want to SHOW the model working forward every chunk
         (including <think>…</think>); callers that want the answer accumulate the
-        chunks and _strip_think() at the end. See parse_json_stream below."""
+        chunks and parse_json() at the end.
+
+        `fmt` constrains output: "json" for loose JSON, or a JSON *schema* dict for
+        schema-constrained decoding (valid-by-construction -- no empty/broken
+        results). Streams fine either way."""
         payload = {
             "model": model or self.default_model,
             "messages": messages,
             "stream": True,
             "options": {"temperature": temperature},
         }
+        if fmt is not None:
+            payload["format"] = fmt
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             async with client.stream("POST", f"{self.base_url}/api/chat", json=payload) as r:
                 r.raise_for_status()
