@@ -1,52 +1,53 @@
-"""Stage 2 -- drill a category into real Reddit discussion + its own long-tail
-keywords, then surface concrete product opportunities grounded in both.
+"""Stage 2 -- drill a category into real Reddit signal, then surface products +
+the subreddits you could actually post them in.
 
-This is where the flow touches the network (so stage 1 stays instant): pull real
-threads from the category's subreddits, expand keywords for the category, then
-have the model read it all and name specific products to source -- each with a
-`cj_search_seed` (the phrase Feature 2 throws at CJdropshipping). It also
-re-rates saturation now that it has evidence.
+Grounding chains two free archives (see subreddits.py): PullPush finds which
+subreddits discuss the niche + real engagement; Arctic Shift profiles those subs
+(subscribers + rules). The model then, from that evidence:
+  - classifies each subreddit's product-posting friendliness (from its rules +
+    submission type + the model's own knowledge),
+  - names concrete PRODUCTS to source, each with a `cj_search_seed` for CJ,
+  - re-rates saturation.
 
-Pass an `emit` callback (app/progress.py) to stream the work as named steps plus
-the model's live thinking, so the UI shows it happening.
+Plus per-category long-tail keywords. Everything degrades: dead archives -> the
+model reasons from the category + its suggested subreddits, and the UI says so.
+Pass `emit` to stream the work.
 """
 import asyncio
 import logging
 
 from ..llm import get_llm, parse_json
 from ..progress import Steps
+from . import subreddits as sr
 from .keywords import expand_keywords
-from .reddit import Thread, get_reddit
 
 log = logging.getLogger(__name__)
 
-MAX_THREADS = 30
-
 _SYS = """You are a product researcher for a dropshipping operator sourcing from
-CJdropshipping. You are given a product category, REAL Reddit threads from the
-communities its buyers use, and long-tail keywords people search. Read what
-people actually want, complain about, and show off, then surface concrete
-PRODUCTS to source.
+CJdropshipping. You are given a product category, the SUBREDDITS its buyers use
+(with subscriber counts, submission type, and each sub's own description/rules),
+REAL post titles from those communities, and long-tail keywords.
 
-For each opportunity, give a `cj_search_seed`: the short phrase to search on
-CJdropshipping to find a matching product (e.g. "linen cable organizer", not
-"cozy vibes"). Ground every pick in the threads/keywords.
-
-Also re-rate the category's saturation 0-100 now that you've seen real signal
-(0 = wide open, 100 = crowded), and say what changed your mind, if anything.
+Do three things:
+1. For EACH subreddit, judge whether the operator could post their own products
+   there -- "yes", "limited" (only via specific threads/flairs/days), or "no"
+   (rules ban self-promo). Base it on the sub's rules/description + submission
+   type + your knowledge of the community. One-line reason each.
+2. Name concrete PRODUCTS to source. For each, a `cj_search_seed`: the short
+   phrase to search on CJdropshipping (e.g. "linen cable organizer", not "cozy
+   vibes"). Ground picks in the posts/keywords.
+3. Re-rate the category's saturation 0-100 (0 = wide open, 100 = crowded).
 
 Output JSON only:
 {
   "saturation": 0-100,
-  "saturation_reasoning": "what the signals tell you about crowding",
+  "saturation_reasoning": "one sentence",
+  "subreddits": [
+    {"name": "exact name given", "product_friendly": "yes|limited|no", "reason": "why"}
+  ],
   "opportunities": [
-    {
-      "product": "the specific product to sell",
-      "rationale": "why the signals support it",
-      "evidence": ["short quote or thread theme that backs it"],
-      "cj_search_seed": "phrase to search on CJdropshipping",
-      "demand_signal": 0-100
-    }
+    {"product": "...", "rationale": "...", "evidence": ["thread theme/keyword"],
+     "cj_search_seed": "...", "demand_signal": 0-100}
   ]
 }
 Return 3-6 opportunities, strongest first."""
@@ -59,33 +60,9 @@ def _clamp(v) -> int:
         return 50
 
 
-async def _gather(reddit, subreddits: list[str]) -> tuple[list[Thread], str]:
-    subs = [s for s in subreddits if s][:5]
-    pooled: dict[str, Thread] = {}
-    if reddit.using_api:
-        results = await asyncio.gather(
-            *(reddit.top(s, time_filter="year", limit=15) for s in subs),
-            return_exceptions=True,
-        )
-        for res in results:
-            if isinstance(res, Exception):
-                continue
-            for t in res:
-                pooled[t.id] = t
-        if len(pooled) >= 5:
-            return list(pooled.values()), "direct"
-    for t in await reddit.discover(subs, max_pages=5):
-        pooled.setdefault(t.id, t)
-    return list(pooled.values()), ("discovery" if pooled else "none")
-
-
-def _thread_block(threads: list[Thread]) -> str:
-    lines = []
-    for t in sorted(threads, key=lambda x: x.score, reverse=True)[:MAX_THREADS]:
-        sig = f" [{t.score} pts]" if t.score else ""
-        body = f" -- {t.selftext[:160]}" if t.selftext else ""
-        lines.append(f"[r/{t.subreddit}]{sig} {t.title}{body}")
-    return "\n".join(lines)
+def _friendly(v: str) -> str:
+    v = str(v or "").lower()
+    return v if v in ("yes", "limited", "no") else "limited"
 
 
 async def drill(
@@ -96,36 +73,41 @@ async def drill(
     keyword_seed: str = "",
     emit=None,
 ) -> dict:
-    """Turn one category into Reddit-grounded product opportunities + keywords."""
+    """Category -> grounded products + product-friendly subreddits + keywords."""
     llm = get_llm()
-    reddit = get_reddit()
     s = Steps(emit) if emit else None
-    subs_label = ", ".join(f"r/{x}" for x in subreddits[:5]) or "(none)"
-    seed = keyword_seed or category  # short seed -> real autocomplete hits
+    seed = keyword_seed or category
+    phrases = list(dict.fromkeys([seed, category]))  # dedup, keep order
 
-    # Reddit + keywords in parallel.
-    if s:
-        await s.running(f"Reading Reddit: {subs_label}")
-        await s.running(f"Expanding keywords for “{seed}”")
-    (threads, source), keywords = await asyncio.gather(
-        _gather(reddit, subreddits),
+    # Grounding (throttled archives) + keywords (separate host) in parallel.
+    grounding, keywords = await asyncio.gather(
+        sr.ground(phrases, model_subreddits=subreddits, emit=emit),
         expand_keywords(seed, limit=20),
     )
     if s:
-        note = f"{len(threads)} threads" if threads else "blocked — reasoning from the category"
-        await s.done(f"Reading Reddit: {subs_label} → {note}")
-        await s.done(f"Expanding keywords for “{seed}” → {len(keywords)} phrases")
+        await s.done(f"Expanded keywords for “{seed}” → {len(keywords)} phrases")
 
-    block = _thread_block(threads)
+    profiles = {p["name"]: p for p in grounding["subreddits"]}
+    sub_block = "\n".join(
+        f"- r/{p['name']} ({p['subscribers'] or '?'} subs, submission_type={p['submission_type'] or '?'}): "
+        f"{(p['description'] or '(no description)')[:200]}"
+        for p in grounding["subreddits"]
+    )
+    post_block = "\n".join(
+        f"[r/{p['subreddit']} {p['score']}pts {p['num_comments']}c] {p['title']}"
+        for p in grounding["posts"][:25]
+    )
     kw_block = ", ".join(k["phrase"] for k in keywords[:20])
+
     user = (
         f"Category: {category}\nAudience: {audience or '(unspecified)'}\n\n"
-        f"REAL REDDIT THREADS ({len(threads)}):\n{block or '(none retrieved)'}\n\n"
-        f"LONG-TAIL KEYWORDS: {kw_block or '(none)'}"
+        f"SUBREDDITS (with rules):\n{sub_block or '(none found)'}\n\n"
+        f"REAL POSTS:\n{post_block or '(archives quiet/down)'}\n\n"
+        f"KEYWORDS: {kw_block or '(none)'}"
     )
     messages = [{"role": "system", "content": _SYS}, {"role": "user", "content": user}]
 
-    label = "Reasoning over the signals to find products"
+    label = "Reasoning over the signals to find products + posting fit"
     try:
         if s:
             await s.running(label)
@@ -141,6 +123,21 @@ async def drill(
         log.warning("drill failed (%s)", e)
         data = {}
 
+    # Merge the model's product-friendliness verdicts back onto the real profiles.
+    verdicts = {}
+    for v in data.get("subreddits", []) if isinstance(data, dict) else []:
+        if isinstance(v, dict) and v.get("name"):
+            verdicts[v["name"].lstrip("r/").strip()] = v
+    subs_out = []
+    for name, prof in profiles.items():
+        v = verdicts.get(name, {})
+        subs_out.append({
+            **prof,
+            "product_friendly": _friendly(v.get("product_friendly")),
+            "reason": v.get("reason", ""),
+        })
+    subs_out.sort(key=lambda p: (p["subscribers"] or 0), reverse=True)
+
     opps = []
     for o in data.get("opportunities", []) if isinstance(data, dict) else []:
         if not isinstance(o, dict) or not o.get("product"):
@@ -154,10 +151,11 @@ async def drill(
     return {
         "category": category,
         "audience": audience,
-        "reddit_source": source,
+        "reddit_source": grounding["source"],  # pullpush+arctic | arctic-only | model-only
         "saturation": _clamp(data.get("saturation")) if isinstance(data, dict) else 50,
         "saturation_reasoning": data.get("saturation_reasoning", "") if isinstance(data, dict) else "",
+        "subreddits": subs_out,
         "opportunities": opps,
         "keywords": keywords,
-        "threads_sampled": [t.dict() for t in sorted(threads, key=lambda x: x.score, reverse=True)[:MAX_THREADS]],
+        "posts_sampled": grounding["posts"][:25],
     }

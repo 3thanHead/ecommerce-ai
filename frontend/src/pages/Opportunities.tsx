@@ -3,6 +3,24 @@ import { api, Category, Drill, ScoutResult } from "../api";
 import { Banner, Meter, Working } from "../components";
 import { useJob } from "../useJob";
 
+function fmt(n: number): string {
+  return n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + "k" : String(n);
+}
+
+function FriendlyBadge({ v }: { v: "yes" | "limited" | "no" }) {
+  const map = {
+    yes: ["✅ can post", "var(--good)"],
+    limited: ["⚠️ limited", "var(--warn)"],
+    no: ["❌ no promo", "var(--bad)"],
+  } as const;
+  const [label, color] = map[v] ?? map.limited;
+  return (
+    <span className="pill" style={{ borderColor: color, color }}>
+      {label}
+    </span>
+  );
+}
+
 // The whole flow: hit the button -> watch the model rank categories least
 // saturated first -> drill or fully automate any one, watching it work.
 export function Opportunities({
@@ -163,16 +181,50 @@ function CategoryCard({
           {drill && (
             <div style={{ marginTop: 12 }}>
               <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-                {drill.reddit_source === "none" ? (
+                {drill.reddit_source === "model-only" ? (
                   <span style={{ color: "var(--warn)" }}>
-                    ⚠ Reddit unreachable — products from category + keyword
-                    reasoning only. Add a Reddit script app for grounded results.
+                    ⚠ Reddit archives quiet — subreddits from the model's knowledge,
+                    not verified. Try again in a bit for live data.
                   </span>
                 ) : (
-                  <>grounded in {drill.threads_sampled.length} Reddit threads ({drill.reddit_source})</>
+                  <>
+                    grounded via <b>{drill.reddit_source}</b> ·{" "}
+                    {drill.posts_sampled.length} real posts
+                  </>
                 )}
               </div>
 
+              {drill.subreddits.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <label>Subreddits — can you post products there?</label>
+                  {drill.subreddits.map((s) => (
+                    <div key={s.name} className="thread" style={{ paddingBottom: 8 }}>
+                      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                        <div>
+                          <FriendlyBadge v={s.product_friendly} />{" "}
+                          <a href={`https://reddit.com/r/${s.name}`} target="_blank" rel="noreferrer">
+                            r/{s.name}
+                          </a>{" "}
+                          {s.subscribers > 0 && (
+                            <span className="muted">· {fmt(s.subscribers)} members</span>
+                          )}
+                          {s.submission_type && (
+                            <span className="muted"> · {s.submission_type} posts</span>
+                          )}
+                          {!s.exists && <span className="muted"> · unverified</span>}
+                        </div>
+                      </div>
+                      {s.reason && (
+                        <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                          {s.reason}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <label>Products to source</label>
               {drill.opportunities.map((o, j) => (
                 <div key={j} className="thread" style={{ paddingBottom: 10 }}>
                   <div className="row" style={{ justifyContent: "space-between" }}>

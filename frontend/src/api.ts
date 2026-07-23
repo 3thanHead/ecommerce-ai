@@ -19,14 +19,35 @@ export type Thread = {
 
 export type Keyword = { phrase: string; freq: number };
 
+export type Post = {
+  subreddit: string;
+  title: string;
+  score: number;
+  num_comments: number;
+  domain: string;
+};
+
+export type SubredditProfile = {
+  name: string;
+  subscribers: number;
+  submission_type: string; // any | link | self
+  description: string;
+  exists: boolean;
+  posts: number;
+  sample_titles: string[];
+  product_friendly: "yes" | "limited" | "no";
+  reason: string;
+};
+
 export type Drill = {
   category: string;
-  reddit_source: string; // direct | discovery | none
+  reddit_source: string; // pullpush+arctic | arctic-only | model-only
   saturation: number;
   saturation_reasoning: string;
+  subreddits: SubredditProfile[];
   opportunities: Opportunity[];
   keywords: Keyword[];
-  threads_sampled: Thread[];
+  posts_sampled: Post[];
 };
 
 export type Category = {
