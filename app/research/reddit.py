@@ -23,7 +23,7 @@ from dataclasses import asdict, dataclass
 import httpx
 
 from ..config import get_settings
-from .web import read_url
+from .web import active_reader, read_url
 
 log = logging.getLogger(__name__)
 
@@ -124,7 +124,8 @@ class RedditClient:
         PRAW/OAuth path (if creds present) AND the keyless floor, with real
         errors -- so after adding a script app you can tell instantly whether
         oauth.reddit.com is reachable from this box or also IP-blocked."""
-        out: dict = {"has_creds": self.using_api, "user_agent": self.s.reddit_user_agent}
+        out: dict = {"has_creds": self.using_api, "reader": active_reader(),
+                     "user_agent": self.s.reddit_user_agent}
         if self.using_api:
             try:
                 hits = await asyncio.to_thread(self._praw_probe, sub)

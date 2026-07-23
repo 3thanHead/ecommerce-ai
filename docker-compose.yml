@@ -24,6 +24,7 @@ services:
       REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID:-}
       REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET:-}
       REDDIT_USER_AGENT: ${REDDIT_USER_AGENT:-storefront-ai/0.1 (niche research)}
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
       JINA_READER_BASE: ${JINA_READER_BASE:-https://r.jina.ai}
     volumes:
       - ./data:/app/data

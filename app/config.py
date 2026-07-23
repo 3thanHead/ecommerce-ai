@@ -24,7 +24,10 @@ class Settings(BaseSettings):
     reddit_client_secret: str = ""
     reddit_user_agent: str = "storefront-ai/0.1 (niche research)"
 
-    # --- Web fallback source ---
+    # --- Page reader (Reddit grounding) ---
+    # Firecrawl reads Reddit server-side with rotating IPs (reliable despite the
+    # IP block). Free tier: 1,000 credits/mo, no card. Empty -> keyless Jina.
+    firecrawl_api_key: str = ""
     jina_reader_base: str = "https://r.jina.ai"
 
     # --- CJdropshipping (Feature 2) ---
