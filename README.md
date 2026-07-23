@@ -58,19 +58,24 @@ Drill-down reads Reddit through one interface that degrades:
 > script app (path 1) for dependable grounding.** Posting is never automated —
 > the agent drafts; you post.
 
-## Quick start
+## Quick start (docker — everything in one container)
 
 ```bash
 cp .env.example .env          # set OLLAMA_BASE_URL + OLLAMA_MODEL
-make install                  # python venv + npm deps
-
-make dev                      # backend  :8820   (terminal 1)
-make ui                       # admin UI :5173   (terminal 2) -> open this
-
-make check-llm                # confirm the edge-ai connection + list models
+make run                      # build + run -> open http://localhost:8820
+make logs                     # tail logs   |   make stop   to stop
 ```
 
-Docker (backend; UI via `make ui`): `make run`.
+The image builds the React admin and serves it from FastAPI, so there's a single
+container and one URL. Data persists to `./data`. AI still runs on edge-ai.
+
+### Local dev without docker (hot reload, two processes)
+
+```bash
+make install                  # python venv + npm deps
+make dev                      # backend  :8820   (terminal 1)
+make ui                       # admin UI :5173   (terminal 2, proxies /api)
+```
 
 ## Config (`.env`)
 

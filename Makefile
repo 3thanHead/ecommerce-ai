@@ -1,12 +1,14 @@
 # storefront-ai -- niche research + storefront management.
 # AI runs on the edge-ai box (Ollama); this app orchestrates + stores.
 #
-#   make dev        run the backend locally (reload) against .env
-#   make ui         run the React dev server (Vite) at :5173
-#   make run        build + start the backend in docker
-#   make install    set up the python venv + node deps
-#   make check-llm  confirm the edge-ai connection + list models
+#   make run        build + run EVERYTHING in docker -> http://localhost:8820
+#   make logs       tail the docker logs
 #   make stop       stop the docker stack
+#   make check-llm  confirm the edge-ai connection + list models
+#   --- local dev without docker (hot reload, two processes): ---
+#   make install    set up the python venv + node deps
+#   make dev        backend only (reload) at :8820
+#   make ui         React dev server at :5173 (proxies /api to :8820)
 PY := .venv/bin/python
 PIP := .venv/bin/pip
 PORT ?= 8820
@@ -25,7 +27,10 @@ ui:
 
 run:
 	docker compose up -d --build
-	@echo "backend at http://localhost:$(PORT)  (run 'make ui' for the admin UI)"
+	@echo "up -> open http://localhost:$(PORT)  (admin UI + API, all in one container)"
+
+logs:
+	docker compose logs -f
 
 stop:
 	docker compose down
@@ -38,4 +43,4 @@ check-llm:
 build-ui:
 	cd frontend && npm run build
 
-.PHONY: install dev ui run stop check-llm build-ui
+.PHONY: install dev ui run logs stop check-llm build-ui

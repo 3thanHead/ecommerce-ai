@@ -1,11 +1,12 @@
-# The control plane, one service. AI generation happens on edge-ai (Ollama) --
-# reached over the LAN via OLLAMA_BASE_URL -- so nothing heavy runs here. Data is
-# a SQLite file on the mounted ./data volume. Per-machine config is .env
-# (gitignored; see .env.example).
+# One service runs everything: FastAPI + the React admin it serves (built into
+# the image) + SQLite on the mounted ./data volume. Open http://localhost:8820.
+# AI generation happens on edge-ai (Ollama) over the LAN via OLLAMA_BASE_URL, so
+# nothing heavy runs here. Per-machine config is .env (gitignored; see
+# .env.example).
 #
-#   make run     -> docker compose up -d --build
+#   make run     -> docker compose up -d --build   (then open :8820)
 services:
-  api:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
