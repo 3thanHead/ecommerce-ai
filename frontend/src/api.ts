@@ -58,6 +58,8 @@ export type Category = {
   audience: string;
   saturation: number;
   saturation_reasoning: string;
+  saturation_method: "measured" | "estimated";
+  saturation_supply: Record<string, number>;
   angle: string;
   keyword_seed?: string;
   subreddits: string[];

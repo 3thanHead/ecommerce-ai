@@ -13,6 +13,7 @@ import logging
 from ..config import get_settings
 from ..llm import get_heavy_llm, parse_json
 from ..progress import Steps
+from . import saturation as sat
 
 log = logging.getLogger(__name__)
 
@@ -128,7 +129,27 @@ async def find_categories(theme: str = "", model: str | None = None, n: int = 12
         # Short seed for keyword autocomplete; long category names return nothing.
         if not c.get("keyword_seed"):
             c["keyword_seed"] = c["name"]
+        c["saturation_method"] = "estimated"
+        c["saturation_supply"] = {}
         cats.append(c)
+
+    # Measure real supply per category (concurrently) so the leaderboard ranks on
+    # data, not the model's guess. Degrades per-category to the estimate.
+    settings = get_settings()
+    if cats and (settings.has_cj or settings.has_ebay):
+        if s:
+            await s.running(f"Measuring supply for {len(cats)} categories (real saturation)")
+        results = await sat.measure_batch([c["keyword_seed"] for c in cats])
+        measured = 0
+        for c, r in zip(cats, results):
+            if r["measured"]:
+                c["saturation"] = r["saturation"]
+                c["saturation_method"] = "measured"
+                c["saturation_supply"] = r["supply"]
+                measured += 1
+        if s:
+            await s.done(f"Measured saturation for {measured}/{len(cats)} categories")
+
     cats.sort(key=lambda c: c["saturation"])  # least saturated first
     if s:
         await s.done(f"Ranked {len(cats)} categories by saturation")

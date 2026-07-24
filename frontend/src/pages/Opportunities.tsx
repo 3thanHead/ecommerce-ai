@@ -137,13 +137,31 @@ function CategoryCard({
   }
 
   const sat = drill ? drill.saturation : c.saturation;
+  const satMethod = drill ? drill.saturation_method : c.saturation_method;
+  const satSupply = drill ? drill.saturation_supply : c.saturation_supply;
+  const supplyText = Object.entries(satSupply || {})
+    .map(([p, n]) => `${n.toLocaleString()} on ${p}`)
+    .join(", ");
 
   return (
     <div className="card">
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ flex: 1 }}>
-          <div className="row" style={{ alignItems: "center", gap: 14 }}>
+          <div className="row" style={{ alignItems: "center", gap: 10 }}>
             <Meter label="saturation" value={sat} invert />
+            {satMethod === "measured" ? (
+              <span
+                className="pill"
+                style={{ borderColor: "var(--good)", color: "var(--good)" }}
+                title={`Measured supply: ${supplyText}`}
+              >
+                ✓ measured
+              </span>
+            ) : (
+              <span className="pill muted" title="Model estimate — add a CJ/eBay key for measured supply.">
+                est
+              </span>
+            )}
             <h3 style={{ margin: 0, fontSize: 16 }}>{c.name}</h3>
           </div>
           <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
