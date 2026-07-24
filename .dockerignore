@@ -1,0 +1,11 @@
+# Keep the build context small + reproducible (build deps fresh in-image).
+.venv/
+data/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+**/__pycache__/
+*.pyc
+*.tsbuildinfo
+.git/
+.env

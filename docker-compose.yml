@@ -1,0 +1,33 @@
+# One service runs everything: FastAPI + the React admin it serves (built into
+# the image) + SQLite on the mounted ./data volume. Open http://localhost:8820.
+# AI generation happens on edge-ai (Ollama) over the LAN via OLLAMA_BASE_URL, so
+# nothing heavy runs here. Per-machine config is .env (gitignored; see
+# .env.example).
+#
+#   make run     -> docker compose up -d --build   (then open :8820)
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: storefront-ai
+    ports:
+      - "${PORT:-8820}:8820"
+    extra_hosts:
+      # Lets OLLAMA_BASE_URL=http://host.docker.internal:11434 reach an Ollama
+      # running on THIS host (local dev). For the edge-ai box just use its LAN IP.
+      - "host.docker.internal:host-gateway"
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b-instruct}
+      OLLAMA_HEAVY_BASE_URL: ${OLLAMA_HEAVY_BASE_URL:-}
+      OLLAMA_HEAVY_MODEL: ${OLLAMA_HEAVY_MODEL:-}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///data/storefront.db}
+      # Supply counts for measured saturation (optional; degrade to model estimate).
+      CJ_EMAIL: ${CJ_EMAIL:-}
+      CJ_API_KEY: ${CJ_API_KEY:-}
+      EBAY_CLIENT_ID: ${EBAY_CLIENT_ID:-}
+      EBAY_CLIENT_SECRET: ${EBAY_CLIENT_SECRET:-}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

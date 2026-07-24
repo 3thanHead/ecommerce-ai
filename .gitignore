@@ -1,0 +1,27 @@
+# Secrets / local config
+.env
+*.local
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Data (SQLite db + scratch)
+data/
+*.db
+*.sqlite3
+
+# Node / frontend build
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# TS incremental build info
+*.tsbuildinfo
