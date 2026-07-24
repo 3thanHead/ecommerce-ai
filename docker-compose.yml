@@ -23,11 +23,6 @@ services:
       OLLAMA_HEAVY_BASE_URL: ${OLLAMA_HEAVY_BASE_URL:-}
       OLLAMA_HEAVY_MODEL: ${OLLAMA_HEAVY_MODEL:-}
       DATABASE_URL: ${DATABASE_URL:-sqlite:///data/storefront.db}
-      REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID:-}
-      REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET:-}
-      REDDIT_USER_AGENT: ${REDDIT_USER_AGENT:-storefront-ai/0.1 (niche research)}
-      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
-      JINA_READER_BASE: ${JINA_READER_BASE:-https://r.jina.ai}
       # Supply counts for measured saturation (optional; degrade to model estimate).
       CJ_EMAIL: ${CJ_EMAIL:-}
       CJ_API_KEY: ${CJ_API_KEY:-}

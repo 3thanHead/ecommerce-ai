@@ -1,7 +1,7 @@
 """Stage 2 -- drill a category into real Reddit signal, then surface products +
 the subreddits you could actually post them in.
 
-Grounding chains two free archives (see subreddits.py): PullPush finds which
+Grounding chains two free archives (see reddit.py): PullPush finds which
 subreddits discuss the niche + real engagement; Arctic Shift profiles those subs
 (subscribers + rules). The model then, from that evidence:
   - classifies each subreddit's product-posting friendliness (from its rules +
@@ -20,7 +20,7 @@ from ..config import get_settings
 from ..llm import get_llm, parse_json
 from ..progress import Steps
 from . import saturation as sat
-from . import subreddits as sr
+from . import reddit
 from .keywords import expand_keywords
 
 log = logging.getLogger(__name__)
@@ -120,7 +120,7 @@ async def drill(
 
     # Grounding (throttled archives) + keywords (separate host) in parallel.
     grounding, keywords = await asyncio.gather(
-        sr.ground(phrases, model_subreddits=subreddits, emit=emit),
+        reddit.ground(phrases, model_subreddits=subreddits, emit=emit),
         expand_keywords(seed, limit=20),
     )
     if s:

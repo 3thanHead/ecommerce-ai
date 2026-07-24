@@ -1,75 +1,62 @@
-"""Reddit as a research source, behind one interface with THREE backends that
-degrade in order. Callers get the same list[Thread] and never learn which ran.
+"""Reddit grounding via free archives -- no key, no card -- degrading gracefully.
 
-1. PRAW read-only (best) -- when REDDIT_CLIENT_ID/SECRET are set. Structured
-   signals, ToS-compliant, ~100 req/min. Register a "script" app: instant, no
-   approval queue. OAuth goes to oauth.reddit.com, which isn't IP-blocked the
-   way the public site is.
-2. Public `.json` endpoints -- no key, but Reddit now 403-blocks these from many
-   IPs (datacenter AND a lot of residential). When it works you get full signals.
-3. Jina page-read (always-on floor) -- r.jina.ai READS Reddit listing/search
-   pages server-side, so it works even when 1 and 2 are IP-blocked from this box.
-   We parse the real thread links + titles from the markdown. Signals are thinner
-   (score/comments unknown) but titles + subreddits are real. This is the path
-   that keeps research alive here. (Keyless web *search* -- DDG, s.jina.ai -- is
-   now gated/rate-limited, so we don't depend on it.)
+Division of labor (learned the hard way -- PullPush's global full-text search is
+too noisy to DISCOVER subs from a keyword; it returns viral off-topic posts):
+
+  the model   proposes which subreddits fit the niche (it's good at this)
+  Arctic Shift PROFILES each -> subscribers + rules/description + submission type
+               (reliable; this is what tells us "can I post products here")
+  PullPush     scoped to each sub (subreddit=X, q=seed) -> REAL on-topic posts +
+               engagement (score, comments) to ground product ideas
+
+Every call is throttled (both archives rate-limit) and fail-soft: a dead source
+just thins the result. source note reflects what actually answered.
 """
 import asyncio
 import logging
-import re
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 import httpx
 
-from ..config import get_settings
-from .web import active_reader, read_url
+from ..progress import Steps
 
 log = logging.getLogger(__name__)
 
-# https://www.reddit.com/r/<sub>/comments/<id>/<slug>/
-_THREAD_URL_RE = re.compile(r"reddit\.com/r/([^/]+)/comments/([^/]+)/([^/?#]+)")
-# Markdown links Jina emits: [title](url)
-_MD_LINK_RE = re.compile(r"\[([^\]]*)\]\((https?://[^)]+)\)")
-_BOILER = ("welcome to r/", "read the rules", "megathread", "click here")
-
-
-def _is_boiler(title: str) -> bool:
-    t = title.lower()
-    return any(b in t for b in _BOILER)
-
-
-def _strip_sub(name: str) -> str:
-    """Normalize 'r/Cozy', '/r/Cozy ', 'Cozy' -> 'Cozy' (models add the prefix)."""
-    return name.strip().lstrip("/").removeprefix("r/").strip("/ ").strip()
+PULLPUSH = "https://api.pullpush.io/reddit/search/submission/"
+ARCTIC = "https://arctic-shift.photon-reddit.com/api"
 
 
 @dataclass
-class Thread:
-    id: str
-    title: str
+class Post:
     subreddit: str
+    title: str
     score: int
-    upvote_ratio: float
     num_comments: int
-    created_utc: float
-    permalink: str
-    url: str
-    selftext: str
+    domain: str
+
+
+@dataclass
+class SubredditProfile:
+    name: str
+    subscribers: int = 0
+    submission_type: str = ""  # any | link | self
+    description: str = ""
+    exists: bool = False       # confirmed via Arctic Shift
+    posts: int = 0             # on-topic posts PullPush found here
+    sample_titles: list = field(default_factory=list)
 
     def dict(self) -> dict:
         return asdict(self)
 
 
 class _Throttle:
-    """Serialize + space out requests on the keyless path (min interval)."""
-
     def __init__(self, min_interval: float):
         self.min_interval = min_interval
         self._lock = asyncio.Lock()
         self._last = 0.0
 
-    async def wait(self) -> None:
+    async def wait(self):
         async with self._lock:
             gap = time.monotonic() - self._last
             if gap < self.min_interval:
@@ -77,115 +64,109 @@ class _Throttle:
             self._last = time.monotonic()
 
 
-class RedditClient:
-    def __init__(self, settings=None):
-        self.s = settings or get_settings()
-        self._throttle = _Throttle(1.1)
-        self._praw = None  # lazily built sync PRAW instance
+_pp_throttle = _Throttle(1.3)
+_as_throttle = _Throttle(0.6)
 
-    @property
-    def using_api(self) -> bool:
-        return self.s.reddit_has_api
 
-    # --- public interface -------------------------------------------------
-
-    async def search(
-        self,
-        query: str,
-        subreddit: str | None = None,
-        sort: str = "top",
-        time_filter: str = "year",
-        limit: int = 25,
-    ) -> list[Thread]:
-        """Search threads by query (optionally scoped to one subreddit).
-
-        Direct only (PRAW or public .json). Returns [] when blocked/empty -- the
-        agent detects a thin haul and calls discover() ONCE, so we never fan Jina
-        reads out per query.
-        """
-        subreddit = _strip_sub(subreddit) if subreddit else None
-        if self.using_api:
-            return await asyncio.to_thread(
-                self._praw_search, query, subreddit, sort, time_filter, limit
-            )
-        return await self._json_search(query, subreddit, sort, time_filter, limit)
-
-    async def top(
-        self, subreddit: str, time_filter: str = "month", limit: int = 25
-    ) -> list[Thread]:
-        """Top threads in a subreddit -- the audience's current center of mass."""
-        subreddit = _strip_sub(subreddit)
-        if self.using_api:
-            return await asyncio.to_thread(self._praw_top, subreddit, time_filter, limit)
-        return await self._json_top(subreddit, time_filter, limit)
-
-    async def check(self, sub: str = "pics") -> dict:
-        """Diagnostic: does Reddit access actually work from here? Reports the
-        PRAW/OAuth path (if creds present) AND the keyless floor, with real
-        errors -- so after adding a script app you can tell instantly whether
-        oauth.reddit.com is reachable from this box or also IP-blocked."""
-        out: dict = {"has_creds": self.using_api, "reader": active_reader(),
-                     "user_agent": self.s.reddit_user_agent}
-        if self.using_api:
-            try:
-                hits = await asyncio.to_thread(self._praw_probe, sub)
-                out["praw"] = {"ok": True, "count": len(hits),
-                               "sample": hits[0].title if hits else None}
-            except Exception as e:
-                out["praw"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+async def _pullpush(client, q: str, subreddit: str | None = None, size: int = 40) -> list[dict]:
+    await _pp_throttle.wait()
+    params = {"q": q, "size": size, "sort_type": "score", "sort": "desc"}
+    if subreddit:
+        params["subreddit"] = subreddit
+    for _ in range(2):
         try:
-            d = await self.discover([sub], max_pages=1)
-            out["keyless"] = {"ok": bool(d), "count": len(d)}
+            r = await client.get(PULLPUSH, params=params)
+            if r.status_code == 429:
+                await asyncio.sleep(2.5)
+                continue
+            r.raise_for_status()
+            return r.json().get("data", [])
         except Exception as e:
-            out["keyless"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
-        return out
-
-    def _praw_probe(self, sub: str) -> list[Thread]:
-        """Like _praw_top but lets errors propagate (for check())."""
-        subs = self._reddit().subreddit(sub).top(time_filter="week", limit=3)
-        return [self._from_submission(s) for s in subs]
-
-    # --- web-discovery backend (always-on floor) --------------------------
-
-    async def discover(self, subreddits: list[str], max_pages: int = 5) -> list[Thread]:
-        """Always-on floor: have Jina READ each subreddit's /top listing server-side
-        (bypassing this box's IP block), then parse the real thread links + titles
-        from the returned markdown.
-
-        No search engine involved -- s.jina.ai/DuckDuckGo now gate or rate-limit
-        keyless search, but r.jina.ai reading a public Reddit page still works. We
-        read subreddit LISTINGS only (not /search, which renders empty via Jina)
-        and keep ONLY threads whose subreddit we actually requested -- Reddit's
-        global "popular" rail leaks into the markdown for JS-heavy or nonexistent
-        subs, and that filter drops it. Engagement numbers aren't in the markdown,
-        so they stay 0; titles + subreddits are real, which is what the model reads.
-        """
-        wanted = [_strip_sub(x) for x in subreddits if _strip_sub(x)][:max_pages]
-        wanted_lc = {w.lower() for w in wanted}
-        urls = [f"https://www.reddit.com/r/{sub}/top/?t=year" for sub in wanted]
-
-        pages = await asyncio.gather(*(read_url(u, max_chars=8000) for u in urls))
-        threads: dict[str, Thread] = {}
-        for md in pages:
-            for label, url in _MD_LINK_RE.findall(md or ""):
-                m = _THREAD_URL_RE.search(url)
-                if not m:
-                    continue
-                sub, tid, slug = m.group(1), m.group(2), m.group(3)
-                if sub.lower() not in wanted_lc:  # drop popular-rail leakage
-                    continue
-                title = label.strip() or slug.replace("_", " ").strip().capitalize()
-                if tid in threads or _is_boiler(title):
-                    continue
-                threads[tid] = Thread(
-                    id=tid, title=title, subreddit=sub, score=0, upvote_ratio=0.0,
-                    num_comments=0, created_utc=0.0,
-                    permalink=f"https://www.reddit.com/r/{sub}/comments/{tid}/{slug}",
-                    url=url, selftext="",
-                )
-        return list(threads.values())
+            log.warning("pullpush %s/%s failed (%s)", subreddit, q, e)
+            return []
+    return []
 
 
+async def _arctic_profile(client, name: str) -> dict:
+    await _as_throttle.wait()
+    try:
+        r = await client.get(f"{ARCTIC}/subreddits/search", params={"subreddit": name, "limit": 1})
+        r.raise_for_status()
+        data = r.json().get("data") or []
+        # Arctic prefix-matches; keep only an exact (case-insensitive) hit.
+        for d in data:
+            if (d.get("display_name", "") or "").lower() == name.lower():
+                return d
+        return data[0] if data and len(data) == 1 else {}
+    except Exception as e:
+        log.warning("arctic '%s' failed (%s)", name, e)
+        return {}
 
-def get_reddit() -> RedditClient:
-    return RedditClient()
+
+async def health() -> dict:
+    """Reachability of the two free archives (for the diagnostic endpoint)."""
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        pp = await _pullpush(client, "desk", subreddit="battlestations", size=1)
+        meta = await _arctic_profile(client, "pics")
+    return {
+        "pullpush": {"ok": bool(pp)},
+        "arctic_shift": {"ok": bool(meta), "sample_subscribers": meta.get("subscribers")},
+    }
+
+
+async def ground(
+    phrases: list[str], model_subreddits: list[str] | None = None, top: int = 6, emit=None
+) -> dict:
+    """Profile + ground the model's suggested subreddits. Returns
+    {subreddits:[profile...], posts:[...], source}."""
+    s = Steps(emit) if emit else None
+    names = list(dict.fromkeys([n.lstrip("r/").strip() for n in (model_subreddits or []) if n]))[:top]
+    seed = phrases[0] if phrases else ""
+    profiles = {n: SubredditProfile(name=n) for n in names}
+
+    if not names:
+        return {"subreddits": [], "posts": [], "source": "model-only"}
+
+    if s:
+        await s.running(f"Profiling {len(names)} subreddits via Arctic Shift (subscribers + rules)")
+    async with httpx.AsyncClient(timeout=25.0) as client:
+        # Arctic Shift profiles (reliable) — subscribers + rules + submission type.
+        for n in names:
+            meta = await _arctic_profile(client, n)
+            if meta:
+                p = profiles[n]
+                p.exists = True
+                p.subscribers = int(meta.get("subscribers", 0) or 0)
+                p.submission_type = meta.get("submission_type", "") or ""
+                desc = (meta.get("public_description") or "").strip()
+                rules = (meta.get("submit_text") or "").strip()
+                p.description = (desc + ("\n" + rules if rules else ""))[:600]
+        if s:
+            got = sum(1 for p in profiles.values() if p.exists)
+            await s.done(f"Profiled subreddits → {got}/{len(names)} confirmed on Arctic Shift")
+            await s.running(f"Pulling real posts (PullPush) from the top subreddits about “{seed}”")
+
+        # PullPush scoped to each real sub — real, on-topic posts + engagement.
+        posts: list[Post] = []
+        for n in [nm for nm in names if profiles[nm].exists][:4] or names[:4]:
+            for row in await _pullpush(client, seed, subreddit=n):
+                post = Post(n, row.get("title", "") or "", int(row.get("score", 0) or 0),
+                            int(row.get("num_comments", 0) or 0), row.get("domain", "") or "")
+                if post.title:
+                    posts.append(post)
+                    prof = profiles[n]
+                    prof.posts += 1
+                    if len(prof.sample_titles) < 3:
+                        prof.sample_titles.append(post.title)
+    if s:
+        await s.done(f"Pulled {len(posts)} real posts across the subreddits")
+
+    ranked = sorted(profiles.values(), key=lambda p: (p.subscribers, p.posts), reverse=True)
+    has_posts = bool(posts)
+    has_profiles = any(p.exists for p in ranked)
+    source = "pullpush+arctic" if has_posts else ("arctic-only" if has_profiles else "model-only")
+    return {
+        "subreddits": [p.dict() for p in ranked],
+        "posts": [asdict(p) for p in sorted(posts, key=lambda x: x.score, reverse=True)[:25]],
+        "source": source,
+    }

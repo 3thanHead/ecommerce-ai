@@ -1,8 +1,8 @@
 """One place for every knob, read from the environment (.env in dev).
 
 Nothing here needs a value to import -- the app boots with defaults so you can
-run it and *then* point OLLAMA_BASE_URL at the fleet. Reddit/CJ keys are
-optional; the code degrades to keyless paths when they're blank.
+run it and *then* point OLLAMA_BASE_URL at the fleet. The CJ/eBay supply keys
+are optional; saturation degrades to the model's estimate when they're blank.
 """
 from functools import lru_cache
 
@@ -26,16 +26,9 @@ class Settings(BaseSettings):
     # --- Datastore ---
     database_url: str = "sqlite:///data/storefront.db"
 
-    # --- Reddit ---
-    reddit_client_id: str = ""
-    reddit_client_secret: str = ""
-    reddit_user_agent: str = "storefront-ai/0.1 (niche research)"
-
-    # --- Page reader (Reddit grounding) ---
-    # Firecrawl reads Reddit server-side with rotating IPs (reliable despite the
-    # IP block). Free tier: 1,000 credits/mo, no card. Empty -> keyless Jina.
-    firecrawl_api_key: str = ""
-    jina_reader_base: str = "https://r.jina.ai"
+    # Reddit grounding uses the free Pushshift-successor archives (PullPush +
+    # Arctic Shift) directly -- no keys, no page reader -- so there's nothing to
+    # configure here. See backend/research/reddit.py.
 
     # --- Supply counts for MEASURED saturation (all optional; degrade to the
     #     model's estimate when unset) ---
@@ -55,10 +48,6 @@ class Settings(BaseSettings):
     @property
     def has_ebay(self) -> bool:
         return bool(self.ebay_client_id and self.ebay_client_secret)
-
-    @property
-    def reddit_has_api(self) -> bool:
-        return bool(self.reddit_client_id and self.reddit_client_secret)
 
 
 @lru_cache
