@@ -20,7 +20,7 @@ install:
 	cd frontend && npm install
 
 dev:
-	.venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port $(PORT)
+	.venv/bin/uvicorn backend.main:app --reload --host 0.0.0.0 --port $(PORT)
 
 ui:
 	cd frontend && npm run dev

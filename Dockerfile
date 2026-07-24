@@ -17,9 +17,9 @@ WORKDIR /app
 COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
-# The built SPA; app/main.py mounts ./frontend/dist at / when present.
+COPY backend ./backend
+# The built SPA; backend/main.py mounts ./frontend/dist at / when present.
 COPY --from=ui /ui/dist ./frontend/dist
 
 EXPOSE 8820
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8820"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8820"]

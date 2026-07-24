@@ -90,14 +90,16 @@ make ui                       # admin UI :5173   (terminal 2, proxies /api)
 ## Layout
 
 ```
-app/
-  llm/ollama.py          the whole AI connection (one endpoint, per-call model)
+backend/
+  llm/ollama.py          the whole AI connection (one Ollama endpoint, schema-JSON)
   research/
-    categories.py        stage 1 — brainstorm + saturation-rank the leaderboard
-    drilldown.py         stage 2 — category → Reddit threads → products + CJ seed
-    reddit.py            Reddit client (PRAW / .json / Jina page-read)
-    web.py               keyless page reader (Jina)
-  api/                   chat, opportunities, storefronts
+    categories.py        stage 1 — brainstorm + rank by measured saturation
+    drilldown.py         stage 2 — category → subreddits + posts → products (CJ seeds)
+    subreddits.py        Reddit grounding: PullPush (posts) + Arctic Shift (profiles)
+    keywords.py          Google Suggest keyword expansion
+    saturation.py        measured saturation — CJ/eBay supply counts vs demand
+    web.py               keyless page reader (Firecrawl / Jina)
+  api/                   chat, opportunities, storefronts, reddit, saturation
   models.py              Storefront / Product / Niche / ResearchRun (SQLite)
 frontend/src/            React admin: Opportunities, Storefronts, Chat
 infra/                   Terraform (AWS deploy — later)
