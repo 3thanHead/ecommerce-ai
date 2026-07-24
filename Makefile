@@ -45,7 +45,12 @@ check-reddit:
 	@curl -s http://localhost:$(PORT)/api/reddit/health | $(PY) -m json.tool || \
 		echo "backend not up? run 'make run' first"
 
+# Confirm supply sources for measured saturation (CJ / eBay).
+check-saturation:
+	@curl -s http://localhost:$(PORT)/api/saturation/health | $(PY) -m json.tool || \
+		echo "backend not up? run 'make run' first"
+
 build-ui:
 	cd frontend && npm run build
 
-.PHONY: install dev ui run logs stop check-llm check-reddit build-ui
+.PHONY: install dev ui run logs stop check-llm check-reddit check-saturation build-ui

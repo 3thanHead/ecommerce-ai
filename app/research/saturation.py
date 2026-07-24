@@ -129,6 +129,23 @@ async def _cj_count(keyword: str) -> int | None:
 _PROVIDERS = [("cjdropshipping", _cj_count), ("ebay", _ebay_count)]
 
 
+async def health(sample: str = "desk mat") -> dict:
+    """Which supply providers are configured + a live count probe for each."""
+    s = get_settings()
+    out = []
+    for name, fn, configured in (
+        ("cjdropshipping", _cj_count, s.has_cj),
+        ("ebay", _ebay_count, s.has_ebay),
+    ):
+        row = {"name": name, "configured": configured}
+        if configured:
+            count = await fn(sample)
+            row["ok"] = count is not None
+            row["sample_count"] = count
+        out.append(row)
+    return {"sample_keyword": sample, "providers": out}
+
+
 async def measure(keyword: str, keywords: list[dict]) -> dict:
     """Measured saturation for a keyword. Returns:
       {measured, saturation|None, demand, supply:{provider:count}, method}
