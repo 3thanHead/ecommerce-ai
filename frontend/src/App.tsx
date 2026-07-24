@@ -29,7 +29,7 @@ export function App() {
     <div className="app">
       <header>
         <h1>
-          <span className="brand">fleamarket</span>-ai
+          <span className="brand">ecommerce</span>-ai
         </h1>
         <span className="model-badge">
           model

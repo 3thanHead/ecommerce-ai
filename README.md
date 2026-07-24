@@ -1,4 +1,4 @@
-# fleamarket-ai
+# ecommerce-ai
 
 Hit a button and get **product categories ranked least-saturated first** — where
 saturation is *measured* from real supplier catalog counts, not guessed. Drill any
