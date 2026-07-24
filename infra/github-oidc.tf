@@ -3,7 +3,7 @@
 # one repo's main branch.
 
 variable "github_repo" {
-  description = "owner/repo allowed to deploy (e.g. 3thanHead/fleemarket-ai)"
+  description = "owner/repo allowed to deploy (e.g. 3thanHead/fleamarket-ai)"
   type        = string
 }
 
@@ -16,7 +16,7 @@ resource "aws_iam_openid_connect_provider" "github" {
 }
 
 resource "aws_iam_role" "deploy" {
-  name = "fleemarket-github-deploy"
+  name = "fleamarket-github-deploy"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -36,7 +36,7 @@ resource "aws_iam_role" "deploy" {
 }
 
 resource "aws_iam_role_policy" "deploy" {
-  name = "fleemarket-deploy"
+  name = "fleamarket-deploy"
   role = aws_iam_role.deploy.id
   policy = jsonencode({
     Version = "2012-10-17"

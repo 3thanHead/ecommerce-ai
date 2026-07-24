@@ -1,4 +1,4 @@
-# fleemarket-ai -- niche research + storefront management.
+# fleamarket-ai -- niche research + storefront management.
 # AI runs on the edge-ai box (Ollama); this app orchestrates + stores.
 #
 #   make run        build + run EVERYTHING in docker -> http://localhost:8820
