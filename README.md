@@ -1,69 +1,75 @@
-# storefront-ai
+# fleemarket-ai
 
-Hit a button and get **product categories ranked least-saturated first**, then
-**drill any one into Reddit** to surface concrete products to source — each with
-a search seed for CJdropshipping. Promote a category and it becomes a storefront
-with those products queued up. Generation runs on your **edge-ai** Ollama box
-(free, local); this app just orchestrates and stores.
+Hit a button and get **product categories ranked least-saturated first** — where
+saturation is *measured* from real supplier catalog counts, not guessed. Drill any
+category into **real Reddit discussion** to surface concrete products to source
+(each with a CJdropshipping search seed) and the subreddits you could actually
+post them in. Promote a category and it becomes a storefront with those products
+queued up. Generation runs on your **edge-ai** Ollama cluster (free, local); this
+app just orchestrates and stores.
 
 Built **feature by feature**. Working today:
 
-- **The button → category leaderboard.** One model call ranks product categories
-  by saturation (least crowded first), each with its audience, the winning
-  angle, and the subreddits to dig into. Fast and organic — no keyword lists.
-- **Drill-down.** Click a category → the agent pulls real Reddit threads from its
-  communities and names specific products to sell, each with a `cj_search_seed`.
-- **Promote → storefront.** A category becomes a storefront; its drilled products
-  become candidates carrying the CJ seed.
-- **LLM connection.** One Ollama endpoint, model chosen per request. Point
-  `OLLAMA_BASE_URL` at edge-ai (or a local Ollama) and go.
+- **The button → measured leaderboard.** The model brainstorms product
+  categories; real **CJdropshipping supply counts** rank them by saturation
+  (least crowded first), each with its audience, the winning angle, and the
+  subreddits to dig into.
+- **Drill-down.** Click a category → the free Reddit archives surface real threads
+  + subreddit profiles → the model names specific products (each with a
+  `cj_search_seed`) and flags which subreddits **allow product posts**. Plus
+  per-category long-tail keywords.
+- **Measured saturation.** Real supply (CJ product counts, optionally eBay
+  listings) instead of the model's opinion — a reproducible number. Degrades to
+  the estimate when no supply key is set, and the UI says which.
+- **Streamed + local.** Every step streams live, like a build log. One Ollama
+  endpoint, model chosen per request; an optional heavier model for the brainstorm.
 
 **Next (Feature 2):** resolve each `cj_search_seed` against CJdropshipping to
-attach a real product — info, images, videos.
+attach a real product — info, images, video.
 
 ## Flow
 
 ```
         [ Find opportunities ]            ← button (optional broad theme)
-                 │  the model ranks categories by saturation
+                 │  model brainstorms categories → CJ supply counts rank them
                  ▼
-   category leaderboard  (least saturated first)
-                 │  click one → drill
+   category leaderboard  (least SATURATED first — measured)
+                 │  click one → drill or automate
                  ▼
-   Reddit threads ──► concrete products + cj_search_seed   ← grounded in discussion
+   Reddit archives ──► products + cj_search_seed + post-friendly subreddits
                  │  promote
                  ▼
    storefront + product candidates  ──►  (Feature 2) CJdropshipping match
 ```
 
-Stage 1 is instant and offline (pure model judgment). Only drill-down touches
-the network, so the leaderboard never waits on Reddit.
+Only drill-down touches the Reddit archives; the leaderboard just needs the model
++ CJ counts.
 
-## The Reddit path (and its honest limits)
+## Grounding — all free, no keys
 
-Drill-down reads Reddit through one interface that degrades:
+**Reddit** grounding uses the Pushshift-successor **archives**, which need no
+Reddit account:
+- **PullPush** — keyword search → which subreddits discuss a niche + real post
+  engagement (score, comments).
+- **Arctic Shift** — subreddit profiles: subscribers, rules, submission type, so
+  the model can judge "can I post products here?".
 
-1. **PRAW read-only** — used when `REDDIT_CLIENT_ID/SECRET` are set. Real
-   structured signals (score, comments), ToS-compliant, hits `oauth.reddit.com`
-   (the sanctioned path, not the blocked public web). **This is the reliable
-   way to ground drill-downs.** Register a **"script" app** at
-   reddit.com/prefs/apps — instant, no approval queue (that gate is only the
-   *commercial* Data API).
-2. **Public `.json`** — no key, full signals when it works.
-3. **Jina page-read** — `r.jina.ai` reads Reddit pages server-side.
+Both are community-run, throttled, and fail-soft — a dead source just thins a
+drill, and the UI labels how grounded it was (`pullpush+arctic` / `arctic-only` /
+`model-only`). Nothing to configure.
 
-> **Reality check:** Reddit aggressively 403-blocks the keyless paths (2 and 3)
-> — often from residential IPs *and* Jina's servers. When that happens the drill
-> falls back to category reasoning only and the UI says so. **Add a Reddit
-> script app (path 1) for dependable grounding.** Posting is never automated —
-> the agent drafts; you post.
+**Saturation** grounding is **CJdropshipping** (free account) — supply counts per
+keyword. Add eBay for a second signal. Without a key, saturation is the model's
+estimate.
 
 ## Quick start (docker — everything in one container)
 
 ```bash
-cp .env.example .env          # set OLLAMA_BASE_URL + OLLAMA_MODEL
+cp .env.example .env          # set OLLAMA_BASE_URL + OLLAMA_MODEL (+ CJ keys)
 make run                      # build + run -> open http://localhost:8820
 make logs                     # tail logs   |   make stop   to stop
+make check-llm                # confirm the edge-ai connection
+make check-saturation         # confirm CJ/eBay supply sources
 ```
 
 The image builds the React admin and serves it from FastAPI, so there's a single
@@ -81,11 +87,11 @@ make ui                       # admin UI :5173   (terminal 2, proxies /api)
 
 | var | what |
 |-----|------|
-| `OLLAMA_BASE_URL` | edge-ai box, e.g. `http://192.168.1.111:11434` |
-| `OLLAMA_MODEL` | default model (any you've pulled there) |
+| `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | the edge-ai endpoint + workhorse model |
+| `OLLAMA_HEAVY_BASE_URL` / `_MODEL` | optional bigger model for the brainstorm step (blank = use the workhorse) |
 | `DATABASE_URL` | SQLite path (default `sqlite:///data/storefront.db`) |
-| `REDDIT_CLIENT_ID` / `_SECRET` | optional; enables reliable PRAW grounding |
-| `JINA_READER_BASE` | keyless page reader (default `https://r.jina.ai`) |
+| `CJ_EMAIL` / `CJ_API_KEY` | optional; flips saturation from estimate → measured (+ Feature 2 source) |
+| `EBAY_CLIENT_ID` / `_SECRET` | optional second supply signal |
 
 ## Layout
 
@@ -95,11 +101,10 @@ backend/
   research/
     categories.py        stage 1 — brainstorm + rank by measured saturation
     drilldown.py         stage 2 — category → subreddits + posts → products (CJ seeds)
-    subreddits.py        Reddit grounding: PullPush (posts) + Arctic Shift (profiles)
+    reddit.py            Reddit grounding: PullPush (posts) + Arctic Shift (profiles)
     keywords.py          Google Suggest keyword expansion
     saturation.py        measured saturation — CJ/eBay supply counts vs demand
-    web.py               keyless page reader (Firecrawl / Jina)
-  api/                   chat, opportunities, storefronts, reddit, saturation
+  api/                   chat, opportunities, storefronts, diagnostics
   models.py              Storefront / Product / Niche / ResearchRun (SQLite)
 frontend/src/            React admin: Opportunities, Storefronts, Chat
 infra/                   Terraform (AWS deploy — later)

@@ -10,7 +10,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: storefront-ai
+    image: fleemarket-ai
     ports:
       - "${PORT:-8820}:8820"
     extra_hosts:
