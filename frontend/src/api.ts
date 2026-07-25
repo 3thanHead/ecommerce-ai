@@ -64,11 +64,30 @@ export type Category = {
   keyword_seed?: string;
   subreddits: string[];
   drill?: Drill;
+  // Prospecting: how many real supplier products back this seed, and which side
+  // of the band it landed on. "thin" = nothing to source, not a free win.
+  supply_count?: number | null; // extrapolated phrase-matched supplier products
+  demand?: number | null;       // 0-100 buyer-intent breadth (Google Suggest)
+  opportunity?: number;         // demand × low-saturation — the ranking score
+  band?: "open" | "crowded" | "thin" | "unmeasured";
+};
+
+// What the scan actually cost and turned up (the funnel above the leaderboard).
+export type Scan = {
+  scanned: number;
+  rounds: number;
+  pool: number;
+  open: number;
+  crowded: number;
+  thin: number;
+  measured: boolean;
+  max_saturation: number;
+  min_matches: number;
 };
 
 // One SSE frame from a streaming endpoint (see app/progress.py).
 export type SSEEvent =
-  | { type: "step"; name: string; status: "running" | "done" }
+  | { type: "step"; name: string; status: "running" | "done"; key?: string }
   | { type: "thought"; text: string }
   | { type: "result"; data: any }
   | { type: "error"; message: string };
@@ -102,11 +121,16 @@ export async function stream(
   }
 }
 
+// An AI-suggested niche sub-culture to anchor the descent to.
+export type Niche = { space: string; why: string; fresh?: boolean };
+
 export type ScoutResult = {
   run_id: number;
   theme: string;
   model: string;
   categories: Category[];
+  scan?: Scan;
+  chosen_niches?: Niche[]; // present when the AI picked the niches (explore mode)
 };
 
 export type Storefront = {
@@ -141,11 +165,17 @@ export const api = {
       body: JSON.stringify({ messages, model }),
     }),
 
-  // Stage 1: the button -> ranked category leaderboard.
-  scout: (theme: string, model?: string, n = 8) =>
+  // Stage 1: the button -> scan a pool of candidates, keep the n least saturated.
+  scout: (theme: string, model?: string, n = 8, pool = 0, explore = false) =>
     req<ScoutResult>("/api/opportunities", {
       method: "POST",
-      body: JSON.stringify({ theme, model, n }),
+      body: JSON.stringify({ theme, model, n, pool, explore }),
+    }),
+  // AI-suggested niche-spaces to pick from (fresh, not recently explored).
+  niches: (model?: string, n = 12) =>
+    req<{ niches: Niche[] }>("/api/opportunities/niches", {
+      method: "POST",
+      body: JSON.stringify({ model, n }),
     }),
   // Stage 2: drill one category into Reddit -> product opportunities.
   drill: (run_id: number, category_index: number, model?: string) =>

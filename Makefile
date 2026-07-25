@@ -45,7 +45,7 @@ check-reddit:
 	@curl -s http://localhost:$(PORT)/api/reddit/health | $(PY) -m json.tool || \
 		echo "backend not up? run 'make run' first"
 
-# Confirm supply sources for measured saturation (CJ / eBay).
+# Confirm the CJ supply source for measured saturation.
 check-saturation:
 	@curl -s http://localhost:$(PORT)/api/saturation/health | $(PY) -m json.tool || \
 		echo "backend not up? run 'make run' first"

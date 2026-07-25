@@ -24,7 +24,8 @@ from sqlmodel import Session, select
 from ..db import engine, get_session
 from ..models import Product, ResearchRun, Storefront
 from ..progress import Steps, sse
-from ..research import drill, find_categories
+from ..research import DEFAULT_MAX_SATURATION, drill, find_categories
+from ..research import niches as niche_scout
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
@@ -35,7 +36,26 @@ _SSE = {"media_type": "text/event-stream", "headers": {"Cache-Control": "no-cach
 class ScoutRequest(BaseModel):
     theme: str = ""
     model: str | None = None
-    n: int = 8
+    n: int = 8              # results to keep (the leaderboard length)
+    pool: int = 0           # candidates to scan before keeping n; 0 -> 5x n
+    max_saturation: int = DEFAULT_MAX_SATURATION  # ceiling for "open lane"
+    explore: bool = False   # no theme -> let the AI pick fresh niche-spaces first
+
+
+class NichesRequest(BaseModel):
+    model: str | None = None
+    n: int = 12             # how many niche-spaces to suggest
+
+
+async def _resolve_theme(req: ScoutRequest, emit=None) -> tuple[str, list[dict]]:
+    """If exploring with no theme, have the AI pick a few FRESH niche-spaces and
+    anchor the descent to them. Returns (theme, chosen_niches)."""
+    if not (req.explore and not req.theme.strip()):
+        return req.theme, []
+    suggested = await niche_scout.suggest(req.model, k=20, emit=emit)
+    chosen = niche_scout.pick_fresh(suggested, k=3)
+    theme = ", ".join(c["space"] for c in chosen)
+    return theme, chosen
 
 
 class DrillRequest(BaseModel):
@@ -114,9 +134,13 @@ def _build_storefront(cat: dict, drill_result: dict | None) -> dict:
 @router.post("/stream")
 async def scout_stream(req: ScoutRequest):
     async def job(emit):
-        result = await find_categories(req.theme, req.model, req.n, emit=emit)
+        theme, chosen = await _resolve_theme(req, emit=emit)
+        result = await find_categories(theme, req.model, req.n, req.pool,
+                                       req.max_saturation, emit=emit)
+        if chosen:
+            result["chosen_niches"] = chosen
         with Session(engine) as session:
-            run = ResearchRun(prompt=req.theme, model=result["model"], result=result)
+            run = ResearchRun(prompt=theme, model=result["model"], result=result)
             session.add(run)
             session.commit()
             session.refresh(run)
@@ -124,6 +148,12 @@ async def scout_stream(req: ScoutRequest):
         await emit(type="result", data={"run_id": rid, **result})
 
     return StreamingResponse(sse(job), **_SSE)
+
+
+@router.post("/niches")
+async def suggest_niches(req: NichesRequest):
+    """A list of fresh (not-recently-explored) niche-spaces to pick from."""
+    return {"niches": await niche_scout.suggest(req.model, k=req.n)}
 
 
 @router.post("/drill/stream")
@@ -160,8 +190,12 @@ async def automate_stream(req: DrillRequest):
 
 @router.post("")
 async def scout(req: ScoutRequest, session: Session = Depends(get_session)):
-    result = await find_categories(req.theme, req.model, req.n)
-    run = ResearchRun(prompt=req.theme, model=result["model"], result=result)
+    theme, chosen = await _resolve_theme(req)
+    result = await find_categories(theme, req.model, req.n, req.pool,
+                                   req.max_saturation)
+    if chosen:
+        result["chosen_niches"] = chosen
+    run = ResearchRun(prompt=theme, model=result["model"], result=result)
     session.add(run)
     session.commit()
     session.refresh(run)

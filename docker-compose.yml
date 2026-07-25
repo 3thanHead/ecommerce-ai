@@ -26,8 +26,6 @@ services:
       # Supply counts for measured saturation (optional; degrade to model estimate).
       CJ_EMAIL: ${CJ_EMAIL:-}
       CJ_API_KEY: ${CJ_API_KEY:-}
-      EBAY_CLIENT_ID: ${EBAY_CLIENT_ID:-}
-      EBAY_CLIENT_SECRET: ${EBAY_CLIENT_SECRET:-}
     volumes:
       - ./data:/app/data
     restart: unless-stopped

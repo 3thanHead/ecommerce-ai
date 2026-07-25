@@ -4,7 +4,7 @@ A "job" is `async def job(emit): ...` that calls `await emit(...)` as it goes.
 `sse(job)` runs it and turns each emit into an SSE frame. Event shapes (the
 `type` field drives the UI):
 
-  {"type":"step",    "name": "...", "status": "running"|"done"}
+  {"type":"step",    "name": "...", "status": "running"|"done", "key": "..."|null}
   {"type":"thought", "text": "..."}     # streamed model tokens (the "thinking")
   {"type":"result",  "data": {...}}     # final payload
   {"type":"error",   "message": "..."}
@@ -47,16 +47,21 @@ async def sse(job):
 
 class Steps:
     """Small helper a job uses to announce named steps. `async with s.step(name)`
-    emits running on enter and done on exit (or the job can call s.done(name))."""
+    emits running on enter and done on exit (or the job can call s.done(name)).
+
+    Pass `key` when a step's LABEL changes as it progresses ("measuring 12/40"
+    -> "measuring 40/40"): the UI matches on the key, so the row updates in
+    place instead of piling up one line per tick. Without a key the name is the
+    identity, as before."""
 
     def __init__(self, emit):
         self._emit = emit
 
-    async def running(self, name: str):
-        await self._emit(type="step", name=name, status="running")
+    async def running(self, name: str, key: str | None = None):
+        await self._emit(type="step", name=name, status="running", key=key)
 
-    async def done(self, name: str):
-        await self._emit(type="step", name=name, status="done")
+    async def done(self, name: str, key: str | None = None):
+        await self._emit(type="step", name=name, status="done", key=key)
 
     async def thought(self, text: str):
         await self._emit(type="thought", text=text)

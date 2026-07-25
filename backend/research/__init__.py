@@ -1,4 +1,4 @@
-from .categories import find_categories
+from .categories import DEFAULT_MAX_SATURATION, find_categories
 from .drilldown import drill
 
-__all__ = ["find_categories", "drill"]
+__all__ = ["DEFAULT_MAX_SATURATION", "find_categories", "drill"]

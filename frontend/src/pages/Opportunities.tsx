@@ -1,10 +1,57 @@
 import { useState } from "react";
-import { api, Category, Drill, ScoutResult } from "../api";
+import { api, Category, Drill, Niche, Scan, ScoutResult } from "../api";
 import { Banner, Meter, Working } from "../components";
 import { useJob } from "../useJob";
 
 function fmt(n: number): string {
   return n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + "k" : String(n);
+}
+
+// The scan budget, as a multiple of the results you want back. The engine seeds
+// broad directions, then keeps drilling the least-saturated into narrower niches
+// until it hits the floor — a bigger budget descends further into low saturation.
+const DEPTHS = [
+  { mult: 1, label: "Quick", hint: "measure the seed directions only — no descent" },
+  { mult: 5, label: "Standard", hint: "descend a few levels into niches" },
+  { mult: 10, label: "Deep", hint: "descend hard — slow, lowest-saturation niches" },
+];
+
+// Supply lookups are serialized at ~1 req/sec by CJ's rate limit, so a big pool
+// is genuinely minutes. Say so up front rather than looking hung.
+function eta(pool: number): string {
+  const secs = Math.round(pool * 1.2);
+  return secs < 90 ? `~${secs}s` : `~${Math.round(secs / 60)} min`;
+}
+
+function ScanSummary({ scan }: { scan: Scan }) {
+  if (!scan.measured) {
+    return (
+      <div className="card muted" style={{ fontSize: 13 }}>
+        Saturation is the model's estimate — add <b>CJ_EMAIL</b>/<b>CJ_API_KEY</b>{" "}
+        to .env to measure real supply and descend into low-saturation niches.
+      </div>
+    );
+  }
+  return (
+    <div className="card" style={{ fontSize: 13 }}>
+      Scanned <b>{scan.scanned}</b> candidates over {scan.rounds}{" "}
+      {scan.rounds === 1 ? "round" : "rounds"} →{" "}
+      <span style={{ color: "var(--good)" }}>
+        <b>{scan.open}</b> open {scan.open === 1 ? "lane" : "lanes"}
+      </span>{" "}
+      (saturation ≤ {scan.max_saturation}) ·{" "}
+      <span className="muted">
+        {scan.crowded} too crowded · {scan.thin} not sourceable (no supplier
+        carries it)
+      </span>
+      {scan.open === 0 && (
+        <div style={{ color: "var(--warn)", marginTop: 6 }}>
+          Nothing came in under the ceiling — showing the least crowded of what was
+          scanned. Try a narrower theme, a deeper scan, or a higher ceiling.
+        </div>
+      )}
+    </div>
+  );
 }
 
 function FriendlyBadge({ v }: { v: "yes" | "limited" | "no" }) {
@@ -31,10 +78,36 @@ export function Opportunities({
   onPromoted: () => void;
 }) {
   const [theme, setTheme] = useState("");
+  const [n, setN] = useState(8);
+  const [depth, setDepth] = useState(5);
+  const [niches, setNiches] = useState<Niche[] | null>(null);
+  const [nichesBusy, setNichesBusy] = useState(false);
   const scout = useJob<ScoutResult>();
 
-  function find() {
-    if (!scout.running) scout.run("/api/opportunities/stream", { theme, model, n: 8 });
+  const pool = Math.min(n * depth, 200);
+
+  function runWith(themeArg: string, explore: boolean) {
+    if (scout.running) return;
+    setNiches(null);
+    scout.run("/api/opportunities/stream", { theme: themeArg, model, n, pool, explore });
+  }
+  // No theme -> "surprise me": the AI picks fresh niche-spaces itself.
+  const find = () => runWith(theme, !theme.trim());
+  const pickNiche = (space: string) => {
+    setTheme(space);
+    runWith(space, false);
+  };
+
+  async function suggestNiches() {
+    if (nichesBusy) return;
+    setNichesBusy(true);
+    try {
+      setNiches((await api.niches(model, 12)).niches);
+    } catch {
+      /* surfaced via the banner on the next scout run */
+    } finally {
+      setNichesBusy(false);
+    }
   }
 
   const result = scout.result;
@@ -44,17 +117,79 @@ export function Opportunities({
       <div className="card">
         <div className="row" style={{ alignItems: "flex-end" }}>
           <div style={{ flex: 1, minWidth: 220 }}>
-            <label>Theme (optional — leave blank to range broadly)</label>
+            <label>Theme (optional — blank = let the AI pick a fresh niche)</label>
             <input
               value={theme}
-              placeholder="e.g. pet stuff, outdoor gear, desk setups…"
+              placeholder="blank → surprise me · or type a space, e.g. desk setups"
               onChange={(e) => setTheme(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && find()}
             />
           </div>
-          <button className="primary" onClick={find} disabled={scout.running}>
-            {scout.running ? "Scouting…" : "Find opportunities"}
+          <div>
+            <label>Results</label>
+            <select value={n} onChange={(e) => setN(Number(e.target.value))}>
+              {[3, 5, 8, 12, 20].map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label>Scan depth</label>
+            <select
+              value={depth}
+              onChange={(e) => setDepth(Number(e.target.value))}
+              title={DEPTHS.find((d) => d.mult === depth)?.hint}
+            >
+              {DEPTHS.map((d) => (
+                <option key={d.mult} value={d.mult} title={d.hint}>
+                  {d.label} ({d.mult}×)
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            className="ghost"
+            onClick={suggestNiches}
+            disabled={scout.running || nichesBusy}
+            title="Let the AI list obscure niches to pick from"
+          >
+            {nichesBusy ? "Thinking…" : "Suggest niches"}
           </button>
+          <button className="primary" onClick={find} disabled={scout.running}>
+            {scout.running ? "Scanning…" : theme.trim() ? "Find opportunities" : "Surprise me"}
+          </button>
+        </div>
+
+        {niches && !scout.running && (
+          <div style={{ marginTop: 10 }}>
+            <label>Pick a niche to descend into — or just hit Surprise me</label>
+            <div>
+              {niches.map((nz) => (
+                <button
+                  key={nz.space}
+                  className="pill"
+                  onClick={() => pickNiche(nz.space)}
+                  title={nz.why}
+                  style={{ cursor: "pointer", marginBottom: 4 }}
+                >
+                  {nz.space}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+          {depth === 1 ? (
+            <>Measures the seed directions and ranks them — no descent.</>
+          ) : (
+            <>
+              Descends up to <b>{pool}</b> candidates deep, keeping the <b>{n}</b>{" "}
+              lowest-saturation sourceable niches · {eta(pool)} of supplier lookups
+            </>
+          )}
         </div>
         {(scout.running || (!result && scout.steps.length > 0)) && (
           <div style={{ marginTop: 12 }}>
@@ -63,13 +198,28 @@ export function Opportunities({
         )}
         {!result && !scout.running && scout.steps.length === 0 && (
           <p className="muted" style={{ marginBottom: 0 }}>
-            Ranked least-saturated first. Drill a category into Reddit for products
-            to source, or hit <b>Automate</b> to build its storefront in one go.
+            Hit <b>Surprise me</b> and the AI picks a fresh niche for you (different
+            every run), then descends into its least-saturated products. Or{" "}
+            <b>Suggest niches</b> to pick one yourself. Then drill a niche into
+            Reddit for products to source, or <b>Automate</b> a storefront.
           </p>
         )}
       </div>
 
       {scout.error && <Banner>{scout.error}</Banner>}
+
+      {result?.chosen_niches && result.chosen_niches.length > 0 && (
+        <div className="card" style={{ fontSize: 13 }}>
+          <span className="muted">AI picked these niches to explore this run:</span>{" "}
+          {result.chosen_niches.map((nz) => (
+            <span className="pill" key={nz.space} title={nz.why}>
+              {nz.space}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {result?.scan && <ScanSummary scan={result.scan} />}
 
       {result &&
         result.categories.map((c, i) => (
@@ -148,18 +298,37 @@ function CategoryCard({
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ flex: 1 }}>
           <div className="row" style={{ alignItems: "center", gap: 10 }}>
+            {c.opportunity != null && (
+              <span
+                className="pill"
+                style={{ borderColor: "var(--good)", color: "var(--good)", fontWeight: 700 }}
+                title="Opportunity = demand × low saturation — the score the board is ranked by. High = people search for it AND few sellers stock it."
+              >
+                ⭐ {c.opportunity}
+              </span>
+            )}
             <Meter label="saturation" value={sat} invert />
+            {c.demand != null && <Meter label="demand" value={c.demand} />}
             {satMethod === "measured" ? (
               <span
                 className="pill"
                 style={{ borderColor: "var(--good)", color: "var(--good)" }}
-                title={`Measured supply: ${supplyText}`}
+                title={`Phrase-matched supplier supply: ${supplyText}`}
               >
-                ✓ measured
+                ✓ {c.supply_count != null ? `~${fmt(c.supply_count)}` : "measured"}
               </span>
             ) : (
               <span className="pill muted" title="Model estimate — add a CJ/eBay key for measured supply.">
                 est
+              </span>
+            )}
+            {c.band === "crowded" && (
+              <span
+                className="pill"
+                style={{ borderColor: "var(--warn)", color: "var(--warn)" }}
+                title="Over the saturation ceiling — shown only because the scan found nothing more open."
+              >
+                over ceiling
               </span>
             )}
             <h3 style={{ margin: 0, fontSize: 16 }}>{c.name}</h3>
