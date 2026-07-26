@@ -53,36 +53,58 @@ export type Drill = {
   posts_sampled: Post[];
 };
 
+// A real CJdropshipping product, straight off their catalog — the atom the whole
+// flow is built from. `listings` is how many CJ sellers already list this exact
+// product: the competition signal saturation is derived from.
+export type CJProduct = {
+  pid: string;
+  title: string;
+  price: number | null;
+  image: string;
+  listings: number;
+  category: string;
+  category_path: string;
+  saturation: number;
+  demand?: number | null;
+  opportunity?: number;
+  band?: "open" | "crowded";
+};
+
+// A storefront concept: real products grouped into a shop someone would run.
 export type Category = {
   name: string;
   audience: string;
-  saturation: number;
-  saturation_reasoning: string;
-  saturation_method: "measured" | "estimated";
-  saturation_supply: Record<string, number>;
   angle: string;
   keyword_seed?: string;
   subreddits: string[];
+  products: CJProduct[];
   drill?: Drill;
-  // Prospecting: how many real supplier products back this seed, and which side
-  // of the band it landed on. "thin" = nothing to source, not a free win.
-  supply_count?: number | null; // extrapolated phrase-matched supplier products
+  saturation: number;
+  saturation_reasoning?: string;
+  saturation_method?: "measured" | "estimated";
+  saturation_supply?: Record<string, number>;
+  listings?: number;            // mean CJ sellers per product in this concept
+  supply_count?: number | null;
   demand?: number | null;       // 0-100 buyer-intent breadth (Google Suggest)
   opportunity?: number;         // demand × low-saturation — the ranking score
-  band?: "open" | "crowded" | "thin" | "unmeasured";
+  band?: "open" | "crowded";
+  category_paths?: string[];    // the CJ aisles its products came from
+  price_range?: [number, number] | null;
 };
 
-// What the scan actually cost and turned up (the funnel above the leaderboard).
+// What the scan actually cost and turned up (the funnel above the board).
 export type Scan = {
-  scanned: number;
-  rounds: number;
-  pool: number;
-  open: number;
-  crowded: number;
-  thin: number;
+  scanned: number;            // real CJ products looked at
+  categories_scanned: number; // CJ leaf categories hunted in
+  grounds: string[];          // which ones
+  open?: number;              // products under the saturation ceiling
+  crowded?: number;
+  kept?: number;              // products that made it into a concept
+  concepts?: number;
+  requested?: number;         // n asked for
   measured: boolean;
+  median_listings?: number;
   max_saturation: number;
-  min_matches: number;
 };
 
 // One SSE frame from a streaming endpoint (see app/progress.py).
@@ -121,16 +143,13 @@ export async function stream(
   }
 }
 
-// An AI-suggested niche sub-culture to anchor the descent to.
-export type Niche = { space: string; why: string; fresh?: boolean };
-
 export type ScoutResult = {
   run_id: number;
   theme: string;
   model: string;
-  categories: Category[];
+  categories: Category[]; // storefront concepts, best opportunity first
   scan?: Scan;
-  chosen_niches?: Niche[]; // present when the AI picked the niches (explore mode)
+  error?: string;
 };
 
 export type Storefront = {
@@ -143,6 +162,23 @@ export type Storefront = {
   status: string;
   product_count?: number;
 };
+
+// A product candidate; the CJ fields (cj_product_id, price, images…) fill in
+// once Feature 2 resolves its search seed.
+export type Product = {
+  id: number;
+  storefront_id: number | null;
+  title: string;
+  description: string;
+  cj_product_id: string;
+  price: number | null;
+  images: string[];
+  videos: string[];
+  source: string;
+  status: string;
+};
+
+export type StorefrontDetail = Storefront & { products: Product[] };
 
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const r = await fetch(path, {
@@ -165,19 +201,13 @@ export const api = {
       body: JSON.stringify({ messages, model }),
     }),
 
-  // Stage 1: the button -> scan a pool of candidates, keep the n least saturated.
-  scout: (theme: string, model?: string, n = 8, pool = 0, explore = false) =>
+  // Stage 1: scan real CJ products, keep the n best storefront concepts.
+  scout: (theme: string, model?: string, n = 8, pool = 0) =>
     req<ScoutResult>("/api/opportunities", {
       method: "POST",
-      body: JSON.stringify({ theme, model, n, pool, explore }),
+      body: JSON.stringify({ theme, model, n, pool }),
     }),
-  // AI-suggested niche-spaces to pick from (fresh, not recently explored).
-  niches: (model?: string, n = 12) =>
-    req<{ niches: Niche[] }>("/api/opportunities/niches", {
-      method: "POST",
-      body: JSON.stringify({ model, n }),
-    }),
-  // Stage 2: drill one category into Reddit -> product opportunities.
+  // Stage 2: drill one concept into Reddit -> audience + product opportunities.
   drill: (run_id: number, category_index: number, model?: string) =>
     req<Drill>("/api/opportunities/drill", {
       method: "POST",
@@ -194,4 +224,5 @@ export const api = {
     ),
 
   storefronts: () => req<Storefront[]>("/api/storefronts"),
+  storefront: (id: number) => req<StorefrontDetail>(`/api/storefronts/${id}`),
 };

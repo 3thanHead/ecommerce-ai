@@ -20,7 +20,10 @@ export function App() {
       .models()
       .then((m) => {
         setModels(m.models);
-        setModel(m.default);
+        // Only select the configured default if the fleet actually serves it --
+        // otherwise the <select> shows the first option while silently sending a
+        // model no node has, and every call comes back 503 from the balancer.
+        setModel(m.models.includes(m.default) ? m.default : m.models[0] ?? "");
       })
       .catch((e) => setFleetErr(e.message));
   }, []);

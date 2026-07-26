@@ -40,7 +40,9 @@ async def sse(job):
             event = await queue.get()
             if event is None:
                 break
-            yield f"data: {json.dumps(event)}\n\n"
+            # default=str so datetimes (and other stragglers) in a result payload
+            # serialize instead of crashing the stream.
+            yield f"data: {json.dumps(event, default=str)}\n\n"
     finally:
         await task
 

@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .api import chat, diagnostics, opportunities, storefronts
+from .api import chat, diagnostics, opportunities, render, storefronts
 from .config import get_settings
 from .db import init_db
 
@@ -37,6 +37,7 @@ app.include_router(chat.router)
 app.include_router(opportunities.router)
 app.include_router(diagnostics.router)
 app.include_router(storefronts.router)
+app.include_router(render.router)  # /store/{slug} — must precede the SPA mount
 
 
 @app.get("/api/health")
