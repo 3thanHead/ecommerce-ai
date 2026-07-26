@@ -1,8 +1,8 @@
 """One place for every knob, read from the environment (.env in dev).
 
 Nothing here needs a value to import -- the app boots with defaults so you can
-run it and *then* point OLLAMA_BASE_URL at the fleet. The CJ/eBay supply keys
-are optional; saturation degrades to the model's estimate when they're blank.
+run it and *then* point OLLAMA_BASE_URL at the fleet. The CJ supply key is
+optional; saturation degrades to the model's estimate when it's blank.
 """
 from functools import lru_cache
 
@@ -30,24 +30,17 @@ class Settings(BaseSettings):
     # Arctic Shift) directly -- no keys, no page reader -- so there's nothing to
     # configure here. See backend/research/reddit.py.
 
-    # --- Supply counts for MEASURED saturation (all optional; degrade to the
+    # --- Supply counts for MEASURED saturation (optional; degrade to the
     #     model's estimate when unset) ---
-    # CJdropshipping: # of dropship products per keyword (the most relevant supply
-    # signal) AND the Feature 2 product source. Free account, no card.
+    # CJdropshipping: # of dropship products per keyword (the supply signal) AND
+    # the Feature 2 product source. Free account, no card. Local + private: this
+    # is an OUTBOUND call from your machine, nothing is exposed.
     cj_email: str = ""
     cj_api_key: str = ""
-    # eBay Browse API: # of listings per keyword (broad-market supply). Free dev
-    # account -> an application (client id/secret) for the client-credentials token.
-    ebay_client_id: str = ""
-    ebay_client_secret: str = ""
 
     @property
     def has_cj(self) -> bool:
         return bool(self.cj_email and self.cj_api_key)
-
-    @property
-    def has_ebay(self) -> bool:
-        return bool(self.ebay_client_id and self.ebay_client_secret)
 
 
 @lru_cache

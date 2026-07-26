@@ -53,22 +53,63 @@ export type Drill = {
   posts_sampled: Post[];
 };
 
+// A real CJdropshipping product, straight off their catalog — the atom the whole
+// flow is built from. `listings` is how many CJ sellers already list this exact
+// product: the competition signal saturation is derived from.
+export type CJProduct = {
+  pid: string;
+  title: string;
+  price: number | null;
+  image: string;
+  listings: number;
+  category: string;
+  category_path: string;
+  saturation: number;
+  demand?: number | null;
+  opportunity?: number;
+  band?: "open" | "crowded";
+};
+
+// A storefront concept: real products grouped into a shop someone would run.
 export type Category = {
   name: string;
   audience: string;
-  saturation: number;
-  saturation_reasoning: string;
-  saturation_method: "measured" | "estimated";
-  saturation_supply: Record<string, number>;
   angle: string;
   keyword_seed?: string;
   subreddits: string[];
+  products: CJProduct[];
   drill?: Drill;
+  saturation: number;
+  saturation_reasoning?: string;
+  saturation_method?: "measured" | "estimated";
+  saturation_supply?: Record<string, number>;
+  listings?: number;            // mean CJ sellers per product in this concept
+  supply_count?: number | null;
+  demand?: number | null;       // 0-100 buyer-intent breadth (Google Suggest)
+  opportunity?: number;         // demand × low-saturation — the ranking score
+  band?: "open" | "crowded";
+  category_paths?: string[];    // the CJ aisles its products came from
+  price_range?: [number, number] | null;
+};
+
+// What the scan actually cost and turned up (the funnel above the board).
+export type Scan = {
+  scanned: number;            // real CJ products looked at
+  categories_scanned: number; // CJ leaf categories hunted in
+  grounds: string[];          // which ones
+  open?: number;              // products under the saturation ceiling
+  crowded?: number;
+  kept?: number;              // products that made it into a concept
+  concepts?: number;
+  requested?: number;         // n asked for
+  measured: boolean;
+  median_listings?: number;
+  max_saturation: number;
 };
 
 // One SSE frame from a streaming endpoint (see app/progress.py).
 export type SSEEvent =
-  | { type: "step"; name: string; status: "running" | "done" }
+  | { type: "step"; name: string; status: "running" | "done"; key?: string }
   | { type: "thought"; text: string }
   | { type: "result"; data: any }
   | { type: "error"; message: string };
@@ -106,7 +147,9 @@ export type ScoutResult = {
   run_id: number;
   theme: string;
   model: string;
-  categories: Category[];
+  categories: Category[]; // storefront concepts, best opportunity first
+  scan?: Scan;
+  error?: string;
 };
 
 export type Storefront = {
@@ -119,6 +162,23 @@ export type Storefront = {
   status: string;
   product_count?: number;
 };
+
+// A product candidate; the CJ fields (cj_product_id, price, images…) fill in
+// once Feature 2 resolves its search seed.
+export type Product = {
+  id: number;
+  storefront_id: number | null;
+  title: string;
+  description: string;
+  cj_product_id: string;
+  price: number | null;
+  images: string[];
+  videos: string[];
+  source: string;
+  status: string;
+};
+
+export type StorefrontDetail = Storefront & { products: Product[] };
 
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const r = await fetch(path, {
@@ -141,13 +201,13 @@ export const api = {
       body: JSON.stringify({ messages, model }),
     }),
 
-  // Stage 1: the button -> ranked category leaderboard.
-  scout: (theme: string, model?: string, n = 8) =>
+  // Stage 1: scan real CJ products, keep the n best storefront concepts.
+  scout: (theme: string, model?: string, n = 8, pool = 0) =>
     req<ScoutResult>("/api/opportunities", {
       method: "POST",
-      body: JSON.stringify({ theme, model, n }),
+      body: JSON.stringify({ theme, model, n, pool }),
     }),
-  // Stage 2: drill one category into Reddit -> product opportunities.
+  // Stage 2: drill one concept into Reddit -> audience + product opportunities.
   drill: (run_id: number, category_index: number, model?: string) =>
     req<Drill>("/api/opportunities/drill", {
       method: "POST",
@@ -164,4 +224,5 @@ export const api = {
     ),
 
   storefronts: () => req<Storefront[]>("/api/storefronts"),
+  storefront: (id: number) => req<StorefrontDetail>(`/api/storefronts/${id}`),
 };

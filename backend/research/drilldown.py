@@ -129,7 +129,7 @@ async def drill(
     # Measured saturation (real supply counts) -- overrides the model's estimate
     # when a supply provider is configured; degrades to it silently otherwise.
     settings = get_settings()
-    if s and (settings.has_cj or settings.has_ebay):
+    if s and settings.has_cj:
         await s.running(f"Measuring supply for “{seed}” (real saturation)")
     sat_result = await sat.measure(seed, keywords)
     if s and sat_result["measured"]:

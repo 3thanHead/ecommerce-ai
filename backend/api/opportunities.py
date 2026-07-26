@@ -1,17 +1,22 @@
 """The opportunity flow the operator drives.
 
+Stage 1 is CJ-first (see research/prospect.py): it scans real CJdropshipping
+products and returns STOREFRONT CONCEPTS -- each a cluster of actual, sourceable
+products with their CJ ids, prices and images. Everything downstream therefore
+starts from real inventory, not from an idea that may have nothing behind it.
+
 Interactive, streamed (Server-Sent Events -- the UI watches the agent work):
-  POST /api/opportunities/stream        button -> category leaderboard
-  POST /api/opportunities/drill/stream  one category -> Reddit + keywords -> products
-  POST /api/opportunities/automate/stream  one category -> drill THEN build the storefront
+  POST /api/opportunities/stream        button -> storefront-concept board
+  POST /api/opportunities/drill/stream  one concept -> Reddit audience research
+  POST /api/opportunities/automate/stream  one concept -> drill THEN build the store
 
 Plain JSON (scripts/tests, no live steps):
   POST /api/opportunities   /drill   /promote
   GET  /api/opportunities   /{run_id}
 
-A run stores the whole leaderboard; drilling caches its result back onto the run.
-Promoting/automating turns a category into a Storefront and seeds Product
-candidates carrying the `cj_search_seed` Feature 2 resolves against CJdropshipping.
+A run stores the whole board; drilling caches its result back onto the run.
+Promoting/automating turns a concept into a Storefront whose Products already
+carry their real CJ product ids (Feature 2 only has to fetch the full gallery).
 """
 import logging
 import re
@@ -24,7 +29,7 @@ from sqlmodel import Session, select
 from ..db import engine, get_session
 from ..models import Product, ResearchRun, Storefront
 from ..progress import Steps, sse
-from ..research import drill, find_categories
+from ..research import DEFAULT_MAX_SATURATION, drill, prospect
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
@@ -35,7 +40,9 @@ _SSE = {"media_type": "text/event-stream", "headers": {"Cache-Control": "no-cach
 class ScoutRequest(BaseModel):
     theme: str = ""
     model: str | None = None
-    n: int = 8
+    n: int = 8              # storefront concepts to keep (the board length)
+    pool: int = 0           # real CJ products to scan; 0 -> 100x n
+    max_saturation: int = DEFAULT_MAX_SATURATION  # ceiling for "open lane"
 
 
 class DrillRequest(BaseModel):
@@ -82,8 +89,12 @@ def _cache_drill(run_id: int, idx: int, result: dict) -> None:
         session.commit()
 
 
-def _build_storefront(cat: dict, drill_result: dict | None) -> dict:
-    """Create a Storefront from a category (+ Product candidates if drilled)."""
+def _build_storefront(cat: dict, drill_result: dict | None = None) -> dict:
+    """Create a Storefront from a concept, seeded with its REAL CJ products.
+
+    The board already resolved these against CJ, so each Product lands with its
+    cj_product_id, price and listing image -- nothing to search for. The store's
+    resolve step later fetches each one's full gallery (products.hydrate)."""
     with Session(engine) as session:
         base = _slugify(cat["name"])
         slug, k = base, 2
@@ -98,11 +109,13 @@ def _build_storefront(cat: dict, drill_result: dict | None) -> dict:
         session.refresh(store)
 
         made = 0
-        for o in (drill_result or {}).get("opportunities", []):
+        for p in cat.get("products", []):
             session.add(Product(
-                storefront_id=store.id, title=o.get("product", "Untitled"),
-                description=o.get("rationale", ""), cj_product_id="",
-                source=f"reddit:{o.get('cj_search_seed', '')}", status="candidate",
+                storefront_id=store.id, title=p.get("title", "Untitled"),
+                description="", cj_product_id=p.get("pid", ""),
+                price=p.get("price"),
+                images=[p["image"]] if p.get("image") else [],
+                source=f"cjdropshipping:{p.get('category', '')}", status="candidate",
             ))
             made += 1
         session.commit()
@@ -114,9 +127,11 @@ def _build_storefront(cat: dict, drill_result: dict | None) -> dict:
 @router.post("/stream")
 async def scout_stream(req: ScoutRequest):
     async def job(emit):
-        result = await find_categories(req.theme, req.model, req.n, emit=emit)
+        result = await prospect(req.theme, req.model, req.n, req.pool,
+                                req.max_saturation, emit=emit)
+        theme = result["theme"]
         with Session(engine) as session:
-            run = ResearchRun(prompt=req.theme, model=result["model"], result=result)
+            run = ResearchRun(prompt=theme, model=result["model"], result=result)
             session.add(run)
             session.commit()
             session.refresh(run)
@@ -139,7 +154,8 @@ async def drill_stream(req: DrillRequest):
 
 @router.post("/automate/stream")
 async def automate_stream(req: DrillRequest):
-    """The 'Start automation' button: drill the category, then build its storefront."""
+    """The 'Start automation' button: research the audience, then build the store
+    from the concept's real CJ products."""
     async def job(emit):
         cat = _load_category(req.run_id, req.category_index)
         s = Steps(emit)
@@ -147,9 +163,9 @@ async def automate_stream(req: DrillRequest):
         result = await drill(cat["name"], cat.get("subreddits", []), cat.get("audience", ""), req.model, cat.get("keyword_seed", ""), emit=emit)
         _cache_drill(req.run_id, req.category_index, result)
 
-        await s.running("Building storefront + product candidates")
+        await s.running("Building storefront from its real CJ products")
         built = _build_storefront(cat, result)
-        await s.done(f"Built storefront /{built['slug']} with {built['products_seeded']} products")
+        await s.done(f"Built storefront /{built['slug']} with {built['products_seeded']} real CJ products")
         await s.done(f"Automating “{cat['name']}”")
         await emit(type="result", data={**built, "drill": result})
 
@@ -160,8 +176,9 @@ async def automate_stream(req: DrillRequest):
 
 @router.post("")
 async def scout(req: ScoutRequest, session: Session = Depends(get_session)):
-    result = await find_categories(req.theme, req.model, req.n)
-    run = ResearchRun(prompt=req.theme, model=result["model"], result=result)
+    result = await prospect(req.theme, req.model, req.n, req.pool,
+                            req.max_saturation)
+    run = ResearchRun(prompt=result["theme"], model=result["model"], result=result)
     session.add(run)
     session.commit()
     session.refresh(run)

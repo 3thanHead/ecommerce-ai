@@ -1,6 +1,6 @@
 """Diagnostics — reachability of the free external sources the research agent
 leans on. These are NOT domain APIs: the actual clients live in backend/research/
-(reddit.py for the PullPush/Arctic Shift archives, saturation.py for the CJ/eBay
+(reddit.py for the PullPush/Arctic Shift archives, saturation.py for the CJ
 supply counts). The research flow uses them internally via /api/opportunities;
 these routes just answer "is the source up?" for `make check-reddit` /
 `make check-saturation`.
@@ -21,5 +21,5 @@ async def reddit_health():
 
 @router.get("/saturation/health")
 async def saturation_health():
-    """Which supply providers (CJ/eBay) are configured + a live count probe."""
+    """Is the CJ supply provider configured + a live count probe."""
     return await sat.health()

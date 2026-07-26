@@ -65,6 +65,19 @@ class Product(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
+class StorePage(SQLModel, table=True):
+    """The generated customer-facing content for a storefront -- branding + copy
+    the /store/{slug} page renders. One per storefront (regenerate overwrites).
+    A new table so it auto-creates without altering the existing schema; per-
+    product sales copy is written back onto Product.description."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    storefront_id: int = Field(foreign_key="storefront.id", index=True, unique=True)
+    tagline: str = ""
+    hero: str = ""
+    accent: str = "#6ee7b7"  # accent color for the store page
+    generated_at: datetime = Field(default_factory=_now)
+
+
 class ResearchRun(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     prompt: str
