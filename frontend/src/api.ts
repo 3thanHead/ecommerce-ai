@@ -70,7 +70,7 @@ export type CJProduct = {
   band?: "open" | "crowded";
 };
 
-// A storefront concept: real products grouped into a shop someone would run.
+// A campaign concept: real products grouped into one social-content push.
 export type Category = {
   name: string;
   audience: string;
@@ -147,12 +147,12 @@ export type ScoutResult = {
   run_id: number;
   theme: string;
   model: string;
-  categories: Category[]; // storefront concepts, best opportunity first
+  categories: Category[]; // campaign concepts, best opportunity first
   scan?: Scan;
   error?: string;
 };
 
-export type Storefront = {
+export type Campaign = {
   id: number;
   slug: string;
   name: string;
@@ -167,7 +167,7 @@ export type Storefront = {
 // once Feature 2 resolves its search seed.
 export type Product = {
   id: number;
-  storefront_id: number | null;
+  campaign_id: number | null;
   title: string;
   description: string;
   cj_product_id: string;
@@ -178,7 +178,7 @@ export type Product = {
   status: string;
 };
 
-export type StorefrontDetail = Storefront & { products: Product[] };
+export type CampaignDetail = Campaign & { products: Product[] };
 
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const r = await fetch(path, {
@@ -201,7 +201,7 @@ export const api = {
       body: JSON.stringify({ messages, model }),
     }),
 
-  // Stage 1: scan real CJ products, keep the n best storefront concepts.
+  // Stage 1: scan real CJ products, keep the n best campaign concepts.
   scout: (theme: string, model?: string, n = 8, pool = 0) =>
     req<ScoutResult>("/api/opportunities", {
       method: "POST",
@@ -213,9 +213,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ run_id, category_index, model }),
     }),
-  // Category -> storefront (+ seeded product candidates if drilled).
+  // Category -> campaign (+ seeded product candidates if drilled).
   promote: (run_id: number, category_index: number) =>
-    req<{ storefront_id: number; slug: string; products_seeded: number }>(
+    req<{ campaign_id: number; slug: string; products_seeded: number }>(
       "/api/opportunities/promote",
       {
         method: "POST",
@@ -223,6 +223,10 @@ export const api = {
       },
     ),
 
-  storefronts: () => req<Storefront[]>("/api/storefronts"),
-  storefront: (id: number) => req<StorefrontDetail>(`/api/storefronts/${id}`),
+  campaigns: () => req<Campaign[]>("/api/campaigns"),
+  campaign: (id: number) => req<CampaignDetail>(`/api/campaigns/${id}`),
+  generateImage: (campaignId: number, productId: number) =>
+    req<Product>(`/api/campaigns/${campaignId}/products/${productId}/generate-image`, {
+      method: "POST",
+    }),
 };

@@ -1,21 +1,21 @@
 """The opportunity flow the operator drives.
 
 Stage 1 is CJ-first (see research/prospect.py): it scans real CJdropshipping
-products and returns STOREFRONT CONCEPTS -- each a cluster of actual, sourceable
+products and returns CAMPAIGN CONCEPTS -- each a cluster of actual, sourceable
 products with their CJ ids, prices and images. Everything downstream therefore
 starts from real inventory, not from an idea that may have nothing behind it.
 
 Interactive, streamed (Server-Sent Events -- the UI watches the agent work):
-  POST /api/opportunities/stream        button -> storefront-concept board
+  POST /api/opportunities/stream        button -> campaign-concept board
   POST /api/opportunities/drill/stream  one concept -> Reddit audience research
-  POST /api/opportunities/automate/stream  one concept -> drill THEN build the store
+  POST /api/opportunities/automate/stream  one concept -> drill THEN build the campaign
 
 Plain JSON (scripts/tests, no live steps):
   POST /api/opportunities   /drill   /promote
   GET  /api/opportunities   /{run_id}
 
 A run stores the whole board; drilling caches its result back onto the run.
-Promoting/automating turns a concept into a Storefront whose Products already
+Promoting/automating turns a concept into a Campaign whose Products already
 carry their real CJ product ids (Feature 2 only has to fetch the full gallery).
 """
 import logging
@@ -27,7 +27,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from ..db import engine, get_session
-from ..models import Product, ResearchRun, Storefront
+from ..models import Campaign, Product, ResearchRun
 from ..progress import Steps, sse
 from ..research import DEFAULT_MAX_SATURATION, drill, prospect
 
@@ -89,29 +89,30 @@ def _cache_drill(run_id: int, idx: int, result: dict) -> None:
         session.commit()
 
 
-def _build_storefront(cat: dict, drill_result: dict | None = None) -> dict:
-    """Create a Storefront from a concept, seeded with its REAL CJ products.
+def _build_campaign(cat: dict, drill_result: dict | None = None) -> dict:
+    """Create a Campaign from a concept, seeded with its REAL CJ products.
 
     The board already resolved these against CJ, so each Product lands with its
-    cj_product_id, price and listing image -- nothing to search for. The store's
-    resolve step later fetches each one's full gallery (products.hydrate)."""
+    cj_product_id, price and listing image -- nothing to search for. The
+    campaign's resolve step later fetches each one's full gallery
+    (products.hydrate)."""
     with Session(engine) as session:
         base = _slugify(cat["name"])
         slug, k = base, 2
-        while session.exec(select(Storefront).where(Storefront.slug == slug)).first():
+        while session.exec(select(Campaign).where(Campaign.slug == slug)).first():
             slug, k = f"{base}-{k}", k + 1
-        store = Storefront(
+        campaign = Campaign(
             slug=slug, name=cat["name"], category=cat["name"],
             audience=cat.get("audience", ""), description=cat.get("angle", ""),
         )
-        session.add(store)
+        session.add(campaign)
         session.commit()
-        session.refresh(store)
+        session.refresh(campaign)
 
         made = 0
         for p in cat.get("products", []):
             session.add(Product(
-                storefront_id=store.id, title=p.get("title", "Untitled"),
+                campaign_id=campaign.id, title=p.get("title", "Untitled"),
                 description="", cj_product_id=p.get("pid", ""),
                 price=p.get("price"),
                 images=[p["image"]] if p.get("image") else [],
@@ -119,7 +120,7 @@ def _build_storefront(cat: dict, drill_result: dict | None = None) -> dict:
             ))
             made += 1
         session.commit()
-        return {"storefront_id": store.id, "slug": slug, "products_seeded": made}
+        return {"campaign_id": campaign.id, "slug": slug, "products_seeded": made}
 
 
 # ----------------------------- streaming ---------------------------------
@@ -154,8 +155,8 @@ async def drill_stream(req: DrillRequest):
 
 @router.post("/automate/stream")
 async def automate_stream(req: DrillRequest):
-    """The 'Start automation' button: research the audience, then build the store
-    from the concept's real CJ products."""
+    """The 'Start automation' button: research the audience, then build the
+    campaign from the concept's real CJ products."""
     async def job(emit):
         cat = _load_category(req.run_id, req.category_index)
         s = Steps(emit)
@@ -163,9 +164,9 @@ async def automate_stream(req: DrillRequest):
         result = await drill(cat["name"], cat.get("subreddits", []), cat.get("audience", ""), req.model, cat.get("keyword_seed", ""), emit=emit)
         _cache_drill(req.run_id, req.category_index, result)
 
-        await s.running("Building storefront from its real CJ products")
-        built = _build_storefront(cat, result)
-        await s.done(f"Built storefront /{built['slug']} with {built['products_seeded']} real CJ products")
+        await s.running("Building campaign from its real CJ products")
+        built = _build_campaign(cat, result)
+        await s.done(f"Built campaign /{built['slug']} with {built['products_seeded']} real CJ products")
         await s.done(f"Automating “{cat['name']}”")
         await emit(type="result", data={**built, "drill": result})
 
@@ -208,7 +209,7 @@ def promote(req: PromoteRequest, session: Session = Depends(get_session)):
         cat = _category_at(run, req.category_index)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return _build_storefront(cat, cat.get("drill"))
+    return _build_campaign(cat, cat.get("drill"))
 
 
 @router.get("")

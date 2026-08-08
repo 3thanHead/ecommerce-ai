@@ -1,10 +1,11 @@
 """The domain, kept small on purpose.
 
-A **storefront** is a store built around one agent-determined category/audience.
-A **niche** is a research finding -- a slice of demand with a saturation rating
--- that may or may not get promoted into a storefront. A **product** is a CJ
-item matched to a niche (Feature 2 fills these in). A **research run** is one
-invocation of the agent, kept so the UI can show history.
+A **campaign** is a batch of products pushed together for one social-content
+wave, built around one agent-determined category/audience. A **niche** is a
+research finding -- a slice of demand with a saturation rating -- that may or
+may not get promoted into a campaign. A **product** is a CJ item matched to a
+niche (Feature 2 fills these in). A **research run** is one invocation of the
+agent, kept so the UI can show history.
 
 JSON-ish lists (images, keywords, sources) are stored as JSON columns to keep
 the schema flat while the shape is still moving.
@@ -21,7 +22,7 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class Storefront(SQLModel, table=True):
+class Campaign(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     slug: str = Field(index=True, unique=True)
     name: str
@@ -34,7 +35,7 @@ class Storefront(SQLModel, table=True):
 
 class Niche(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    storefront_id: Optional[int] = Field(default=None, foreign_key="storefront.id", index=True)
+    campaign_id: Optional[int] = Field(default=None, foreign_key="campaign.id", index=True)
     research_run_id: Optional[int] = Field(default=None, foreign_key="researchrun.id", index=True)
     name: str
     audience: str = ""
@@ -52,7 +53,7 @@ class Niche(SQLModel, table=True):
 
 class Product(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    storefront_id: Optional[int] = Field(default=None, foreign_key="storefront.id", index=True)
+    campaign_id: Optional[int] = Field(default=None, foreign_key="campaign.id", index=True)
     niche_id: Optional[int] = Field(default=None, foreign_key="niche.id", index=True)
     title: str
     description: str = ""
@@ -63,19 +64,6 @@ class Product(SQLModel, table=True):
     source: str = ""  # e.g. "cjdropshipping"
     status: str = "candidate"  # candidate | approved | published
     created_at: datetime = Field(default_factory=_now)
-
-
-class StorePage(SQLModel, table=True):
-    """The generated customer-facing content for a storefront -- branding + copy
-    the /store/{slug} page renders. One per storefront (regenerate overwrites).
-    A new table so it auto-creates without altering the existing schema; per-
-    product sales copy is written back onto Product.description."""
-    id: Optional[int] = Field(default=None, primary_key=True)
-    storefront_id: int = Field(foreign_key="storefront.id", index=True, unique=True)
-    tagline: str = ""
-    hero: str = ""
-    accent: str = "#6ee7b7"  # accent color for the store page
-    generated_at: datetime = Field(default_factory=_now)
 
 
 class ResearchRun(SQLModel, table=True):

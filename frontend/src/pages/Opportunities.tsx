@@ -46,7 +46,7 @@ function ScanSummary({ scan }: { scan: Scan }) {
       <span className="muted">· {scan.crowded ?? 0} already crowded</span>
       <div style={{ marginTop: 6 }}>
         <span style={{ color: "var(--good)" }}>
-          ✓ {scan.concepts ?? 0} storefront concept
+          ✓ {scan.concepts ?? 0} campaign concept
           {scan.concepts === 1 ? "" : "s"} built from {scan.kept ?? 0} real,
           sourceable products
         </span>
@@ -130,7 +130,7 @@ function ProductTile({ p }: { p: CJProduct }) {
 }
 
 // The whole flow: hit the button -> CJ's real catalog is scanned and grouped into
-// storefront concepts -> drill one for its audience, or automate the store.
+// campaign concepts -> drill one for its audience, or automate the campaign.
 export function Opportunities({
   model,
   onPromoted,
@@ -199,7 +199,7 @@ export function Opportunities({
         <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
           Sweeps <b>{cats}</b> real CJdropshipping categories (~<b>{pool}</b>{" "}
           products), keeps the least-contested, and groups them into <b>{n}</b>{" "}
-          storefront concepts · {eta(cats)}
+          campaign concepts · {eta(cats)}
         </div>
         {(scout.running || (!result && scout.steps.length > 0)) && (
           <div style={{ marginTop: 12 }}>
@@ -211,9 +211,9 @@ export function Opportunities({
             Hit <b>Surprise me</b> and it sweeps aisles of CJdropshipping's real
             catalog you haven't looked at yet, scores every product by how many
             sellers are already on it versus how many people search for it, then
-            groups the openings into storefront concepts. Every product you see is
+            groups the openings into campaign concepts. Every product you see is
             real and sourceable — drill one for its audience, or{" "}
-            <b>Automate</b> the whole store.
+            <b>Automate</b> the whole campaign.
           </p>
         )}
       </div>
@@ -385,11 +385,11 @@ function CategoryCard({
             <div style={{ marginTop: 14 }}>
               {promotedSlug ? (
                 <span style={{ color: "var(--good)" }}>
-                  ✓ storefront /{promotedSlug} created
+                  ✓ campaign /{promotedSlug} created
                 </span>
               ) : (
                 <button className="primary" onClick={promote}>
-                  Create storefront + {products.length} products
+                  Create campaign + {products.length} products
                 </button>
               )}
             </div>
@@ -484,14 +484,14 @@ function CategoryCard({
               <div style={{ marginTop: 14 }}>
                 {automatedSlug ? (
                   <span style={{ color: "var(--good)" }}>
-                    ✓ storefront <b>/{automatedSlug}</b> built with{" "}
+                    ✓ campaign <b>/{automatedSlug}</b> built with{" "}
                     {job.result.products_seeded} real CJ products
                   </span>
                 ) : promotedSlug ? (
-                  <span style={{ color: "var(--good)" }}>✓ storefront /{promotedSlug} created</span>
+                  <span style={{ color: "var(--good)" }}>✓ campaign /{promotedSlug} created</span>
                 ) : (
                   <button className="primary" onClick={promote}>
-                    Create storefront + {products.length} products
+                    Create campaign + {products.length} products
                   </button>
                 )}
               </div>

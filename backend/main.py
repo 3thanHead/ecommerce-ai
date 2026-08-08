@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .api import chat, diagnostics, opportunities, render, storefronts
+from .api import campaigns, chat, diagnostics, opportunities
 from .config import get_settings
 from .db import init_db
 
@@ -36,14 +36,18 @@ app.add_middleware(
 app.include_router(chat.router)
 app.include_router(opportunities.router)
 app.include_router(diagnostics.router)
-app.include_router(storefronts.router)
-app.include_router(render.router)  # /store/{slug} — must precede the SPA mount
+app.include_router(campaigns.router)
 
 
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
 
+
+# Generated product images (backend/research/images.py writes here).
+_generated = Path(__file__).resolve().parents[1] / "data" / "generated"
+_generated.mkdir(parents=True, exist_ok=True)
+app.mount("/generated", StaticFiles(directory=str(_generated)), name="generated")
 
 # Serve the built SPA if it exists (prod single-container). Mounted last so it
 # doesn't shadow /api routes.
