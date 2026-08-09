@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .api import campaigns, chat, diagnostics, opportunities
+from .api import campaigns, chat, content, diagnostics, opportunities
 from .config import get_settings
 from .db import init_db
 
@@ -37,6 +37,7 @@ app.include_router(chat.router)
 app.include_router(opportunities.router)
 app.include_router(diagnostics.router)
 app.include_router(campaigns.router)
+app.include_router(content.router)
 
 
 @app.get("/api/health")

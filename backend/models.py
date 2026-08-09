@@ -66,6 +66,24 @@ class Product(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
+class ContentAsset(SQLModel, table=True):
+    """One piece of generated social content staged for review -- an image,
+    a video (roadmap), or a caption -- tied to a product. Nothing posts
+    anywhere on its own; approving one just marks it ready (Phase 5 wires an
+    approval to an actual post via Postiz)."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    campaign_id: int = Field(foreign_key="campaign.id", index=True)
+    product_id: int = Field(foreign_key="product.id", index=True)
+    kind: str  # image | video | caption
+    status: str = "pending_review"  # pending_review | approved | rejected | posted
+    target_platform: str = ""  # tiktok | instagram | youtube | reddit | "" (unset)
+    prompt: str = ""  # what generated it (image/video prompt, or caption brief)
+    text: str = ""  # caption body -- only set when kind == "caption"
+    asset_url: str = ""  # /generated/... path -- only set when kind in (image, video)
+    comfy_workflow: str = ""  # which pipeline/version produced it (roadmap; blank today)
+    created_at: datetime = Field(default_factory=_now)
+
+
 class ResearchRun(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     prompt: str

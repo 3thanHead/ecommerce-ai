@@ -40,18 +40,23 @@ Built **feature by feature**. Working today:
   their real CJ ids already attached. **Resolve** fetches each one's full record —
   price, image gallery, video — live from CJ. (Legacy candidates that only carry
   a search seed still get the search-and-verify path.)
-- **Product image generation.** Hit **Generate image** on a resolved product and
-  the edge-ai fleet's image-gen node (FLUX, product-photo-style prompt) renders a
-  social-ad-style shot, appended to the product's gallery.
+- **Content generation + review queue.** On the **Review** tab, a resolved
+  product gets **Generate content**: one social-ad-style image from the
+  edge-ai fleet's image-gen node, and one caption (hook, benefits, CTA,
+  hashtags) from the same Ollama connection. Both land as `pending_review`
+  `ContentAsset` rows — nothing posts anywhere until you **Approve** it (an
+  approved image also becomes an official product photo; rejected ones just
+  sit there for reference). `+ image`/`+ caption` regenerate one piece at a
+  time if you want another take.
 - **Streamed + local.** Every step streams live, like a build log. One Ollama
   endpoint, model chosen per request; an optional heavier model for clustering.
 
-**Roadmap (not built yet):** a staging/review queue per generated asset
-(image/video/caption, approve or reject before it posts); video generation +
-a ComfyUI drag-and-drop layer on the edge-ai fleet for workshopping product
-placement; a self-hosted **Postiz** integration to auto-post approved content
-to TikTok/Instagram/YouTube; Stripe Payment Links for checkout. Then: a daily
-unattended batch that sweeps the catalog on its own.
+**Roadmap (not built yet):** video generation + a ComfyUI drag-and-drop layer
+on the edge-ai fleet for workshopping product placement (adds a `video` kind
+to the same review queue); a self-hosted **Postiz** integration so approving
+a piece of content actually posts it to TikTok/Instagram/YouTube; Stripe
+Payment Links for checkout. Then: a daily unattended batch that sweeps the
+catalog on its own.
 
 ## Flow
 
@@ -73,9 +78,11 @@ unattended batch that sweeps the catalog on its own.
    campaign + its real products (CJ ids already attached)
                  │  Resolve → full gallery, video, current price from CJ
                  ▼
-   Generate image → edge-ai's image-gen node renders a social-ad-style shot
+   Generate content → image (edge-ai image-gen) + caption (Ollama), staged
+                 │
+                 │  Approve / Reject each piece on the Review tab
                  ▼
-   (roadmap) staged for review → posted via Postiz → checkout via Stripe
+   (roadmap) approved content posted via Postiz → checkout via Stripe
 ```
 
 Nothing invented survives to the board: the model never names a product, it only
@@ -163,9 +170,10 @@ backend/
     keywords.py          Google Suggest keyword expansion + demand probe
     saturation.py        CJ auth/throttle + keyword-supply counts (drill-down)
     products.py          Feature 2 — hydrate a CJ pid (or resolve a legacy seed)
-    images.py            product image generation via edge-ai's image-gen node
-  api/                   chat, opportunities, campaigns, diagnostics
-  models.py              Campaign / Product / Niche / ResearchRun (SQLite)
-frontend/src/            React admin: Opportunities, Campaigns, Chat
+    images.py             product image generation via edge-ai's image-gen node
+    captions.py           social caption generation via Ollama
+  api/                   chat, opportunities, campaigns, content (review queue), diagnostics
+  models.py              Campaign / Product / Niche / ContentAsset / ResearchRun (SQLite)
+frontend/src/            React admin: Opportunities, Campaigns, Review, Chat
 infra/                   Terraform (AWS deploy — later)
 ```

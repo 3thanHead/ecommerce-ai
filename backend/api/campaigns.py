@@ -15,7 +15,6 @@ from sqlmodel import Session, select
 from ..db import engine, get_session
 from ..models import Campaign, Niche, Product
 from ..progress import Steps, sse
-from ..research.images import generate_product_image
 from ..research.products import ground_product, hydrate
 
 log = logging.getLogger(__name__)
@@ -151,29 +150,6 @@ async def resolve_products(campaign_id: int):
             })
 
     return StreamingResponse(sse(job), **_SSE)
-
-
-@router.post("/campaigns/{campaign_id}/products/{product_id}/generate-image")
-async def generate_image(campaign_id: int, product_id: int, session: Session = Depends(get_session)):
-    """Generate one social-ad-style product image via the fleet's image-gen
-    node (see backend/research/images.py) and append it onto the product's
-    image list. 501s if IMAGE_BASE_URL isn't configured."""
-    product = session.get(Product, product_id)
-    if not product or product.campaign_id != campaign_id:
-        raise HTTPException(status_code=404, detail="product not found")
-
-    result = await generate_product_image(product.title, product.description)
-    if result is None:
-        raise HTTPException(
-            status_code=501,
-            detail="image generation isn't configured or the call failed — "
-                    "set IMAGE_BASE_URL to the fleet's image-gen node (see .env.example)",
-        )
-    product.images = [*(product.images or []), result["url"]]
-    session.add(product)
-    session.commit()
-    session.refresh(product)
-    return product
 
 
 @router.delete("/campaigns/{campaign_id}")

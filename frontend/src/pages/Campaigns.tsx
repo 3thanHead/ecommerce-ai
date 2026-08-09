@@ -3,9 +3,10 @@ import { api, Campaign, CampaignDetail, Product } from "../api";
 import { Banner, Working } from "../components";
 import { useJob } from "../useJob";
 
-// The campaigns the agent's niches became. Expand one to see its products,
-// resolve their CJ search seeds into real sourced products (Feature 2), and
-// generate social-ad product images for them.
+// The campaigns the agent's niches became. Expand one to see its products and
+// resolve their CJ search seeds into real sourced products (Feature 2).
+// Generating/reviewing social content for a resolved product happens on the
+// Review tab, not here.
 export function Campaigns({ refreshKey }: { refreshKey: number }) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [err, setErr] = useState("");
@@ -71,20 +72,12 @@ function CampaignCard({
   }, [open]);
 
   // The stream returns the fresh product list; use it the moment it lands.
-  const [products, setProducts] = useState<Product[]>([]);
-  useEffect(() => {
-    setProducts(resolveJob.result?.products ?? detail?.products ?? []);
-  }, [resolveJob.result, detail]);
-
+  const products = resolveJob.result?.products ?? detail?.products ?? [];
   const unresolved = products.filter((p) => !p.cj_product_id).length;
 
   function resolve() {
     if (!resolveJob.running)
       resolveJob.run(`/api/campaigns/${campaign.id}/resolve/stream`, {});
-  }
-
-  function onImageGenerated(updated: Product) {
-    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   }
 
   return (
@@ -141,12 +134,7 @@ function CampaignCard({
 
           <div className="product-grid">
             {products.map((p) => (
-              <ProductCard
-                key={p.id}
-                product={p}
-                campaignId={campaign.id}
-                onImageGenerated={onImageGenerated}
-              />
+              <ProductCard key={p.id} product={p} />
             ))}
           </div>
         </div>
@@ -155,33 +143,9 @@ function CampaignCard({
   );
 }
 
-function ProductCard({
-  product: p,
-  campaignId,
-  onImageGenerated,
-}: {
-  product: Product;
-  campaignId: number;
-  onImageGenerated: (p: Product) => void;
-}) {
-  const [generating, setGenerating] = useState(false);
-  const [err, setErr] = useState("");
+function ProductCard({ product: p }: { product: Product }) {
   const img = p.images?.[0];
   const resolved = !!p.cj_product_id;
-
-  async function generateImage() {
-    if (generating) return;
-    setGenerating(true);
-    setErr("");
-    try {
-      onImageGenerated(await api.generateImage(campaignId, p.id));
-    } catch (e: any) {
-      setErr(e.message);
-    } finally {
-      setGenerating(false);
-    }
-  }
-
   return (
     <div className="product-card">
       <div
@@ -225,22 +189,6 @@ function ProductCard({
           </span>
         )}
       </div>
-      {resolved && (
-        <button
-          className="ghost"
-          style={{ width: "100%", marginTop: 8, fontSize: 12 }}
-          onClick={generateImage}
-          disabled={generating}
-          title="Generate a social-ad-style product image via the edge-ai image-gen node"
-        >
-          {generating ? "Generating…" : "Generate image"}
-        </button>
-      )}
-      {err && (
-        <div className="muted" style={{ fontSize: 11, color: "var(--bad, #f88)", marginTop: 4 }}>
-          {err}
-        </div>
-      )}
     </div>
   );
 }

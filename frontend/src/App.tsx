@@ -4,8 +4,9 @@ import { Banner } from "./components";
 import { Campaigns } from "./pages/Campaigns";
 import { Chat } from "./pages/Chat";
 import { Opportunities } from "./pages/Opportunities";
+import { Review } from "./pages/Review";
 
-type Tab = "opportunities" | "campaigns" | "chat";
+type Tab = "opportunities" | "campaigns" | "review" | "chat";
 
 export function App() {
   const [tab, setTab] = useState<Tab>("opportunities");
@@ -46,7 +47,7 @@ export function App() {
           </select>
         </span>
         <nav>
-          {(["opportunities", "campaigns", "chat"] as Tab[]).map((t) => (
+          {(["opportunities", "campaigns", "review", "chat"] as Tab[]).map((t) => (
             <button
               key={t}
               className={tab === t ? "active" : ""}
@@ -68,6 +69,7 @@ export function App() {
         <Opportunities model={model} onPromoted={() => setCampaignRefresh((n) => n + 1)} />
       )}
       {tab === "campaigns" && <Campaigns refreshKey={campaignRefresh} />}
+      {tab === "review" && <Review model={model} />}
       {tab === "chat" && <Chat model={model} />}
     </div>
   );

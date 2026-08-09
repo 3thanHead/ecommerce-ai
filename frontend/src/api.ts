@@ -180,6 +180,23 @@ export type Product = {
 
 export type CampaignDetail = Campaign & { products: Product[] };
 
+// One generated piece staged for review -- an image, a video (roadmap), or a
+// caption -- tied to a product. Approving an image also lands it on the
+// product's gallery (backend/api/content.py).
+export type ContentAsset = {
+  id: number;
+  campaign_id: number;
+  product_id: number;
+  kind: "image" | "video" | "caption";
+  status: "pending_review" | "approved" | "rejected" | "posted";
+  target_platform: string;
+  prompt: string;
+  text: string;
+  asset_url: string;
+  comfy_workflow: string;
+  created_at: string;
+};
+
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const r = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -225,8 +242,21 @@ export const api = {
 
   campaigns: () => req<Campaign[]>("/api/campaigns"),
   campaign: (id: number) => req<CampaignDetail>(`/api/campaigns/${id}`),
-  generateImage: (campaignId: number, productId: number) =>
-    req<Product>(`/api/campaigns/${campaignId}/products/${productId}/generate-image`, {
+
+  // Staging/review queue.
+  content: (campaignId: number) =>
+    req<ContentAsset[]>(`/api/campaigns/${campaignId}/content`),
+  generateImageAsset: (campaignId: number, productId: number) =>
+    req<ContentAsset>(`/api/campaigns/${campaignId}/products/${productId}/content/image`, {
       method: "POST",
     }),
+  generateCaptionAsset: (campaignId: number, productId: number, model?: string) =>
+    req<ContentAsset>(`/api/campaigns/${campaignId}/products/${productId}/content/caption`, {
+      method: "POST",
+      body: JSON.stringify({ model }),
+    }),
+  approveContent: (assetId: number) =>
+    req<ContentAsset>(`/api/content/${assetId}/approve`, { method: "POST" }),
+  rejectContent: (assetId: number) =>
+    req<ContentAsset>(`/api/content/${assetId}/reject`, { method: "POST" }),
 };
