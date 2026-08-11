@@ -1,6 +1,12 @@
 // One tiny fetch wrapper. Everything is a relative /api call so it works the
 // same in dev (Vite proxy) and prod (served by FastAPI).
 
+// No cjProductUrl() here on purpose: CJ's sourcing API (what pid/cj_product_id
+// come from) uses a numeric id, but the live storefront now keys product
+// pages by a different UUID id our data doesn't have -- any link built from
+// pid lands on a broken/region-gated page. Nothing to point to until that
+// gap closes on CJ's end.
+
 export type Opportunity = {
   product: string;
   rationale: string;
@@ -39,18 +45,27 @@ export type SubredditProfile = {
   reason: string;
 };
 
+export type WebFinding = {
+  title: string;
+  url: string;
+  snippet: string;
+  note?: string;
+};
+
 export type Drill = {
   category: string;
   reddit_source: string; // pullpush+arctic | arctic-only | model-only
+  web_source: string; // searxng | unavailable
+  // The model's own re-rating from what the drill turned up (free, same
+  // call) -- not currently shown anywhere; the board's real saturation meter
+  // uses Category.saturation, measured from actual CJ listing counts.
   saturation: number;
   saturation_reasoning: string;
-  saturation_method: "measured" | "estimated";
-  saturation_supply: Record<string, number>; // {provider: listing count}
-  saturation_demand: number;
   subreddits: SubredditProfile[];
   opportunities: Opportunity[];
   keywords: Keyword[];
   posts_sampled: Post[];
+  web_findings: WebFinding[];
 };
 
 // A real CJdropshipping product, straight off their catalog — the atom the whole
@@ -70,7 +85,7 @@ export type CJProduct = {
   band?: "open" | "crowded";
 };
 
-// A storefront concept: real products grouped into a shop someone would run.
+// A campaign concept: real products grouped into one social-content push.
 export type Category = {
   name: string;
   audience: string;
@@ -147,12 +162,21 @@ export type ScoutResult = {
   run_id: number;
   theme: string;
   model: string;
-  categories: Category[]; // storefront concepts, best opportunity first
+  categories: Category[]; // campaign concepts, best opportunity first
   scan?: Scan;
   error?: string;
 };
 
-export type Storefront = {
+// Row from GET /api/opportunities -- one past scan, newest first.
+export type RunSummary = {
+  id: number;
+  theme: string;
+  model: string;
+  categories: number;
+  created_at: string;
+};
+
+export type Campaign = {
   id: number;
   slug: string;
   name: string;
@@ -167,7 +191,7 @@ export type Storefront = {
 // once Feature 2 resolves its search seed.
 export type Product = {
   id: number;
-  storefront_id: number | null;
+  campaign_id: number | null;
   title: string;
   description: string;
   cj_product_id: string;
@@ -178,7 +202,24 @@ export type Product = {
   status: string;
 };
 
-export type StorefrontDetail = Storefront & { products: Product[] };
+export type CampaignDetail = Campaign & { products: Product[] };
+
+// One generated piece staged for review -- an image, a video (roadmap), or a
+// caption -- tied to a product. Approving an image also lands it on the
+// product's gallery (backend/api/content.py).
+export type ContentAsset = {
+  id: number;
+  campaign_id: number;
+  product_id: number;
+  kind: "image" | "video" | "caption";
+  status: "pending_review" | "approved" | "rejected" | "posted";
+  target_platform: string;
+  prompt: string;
+  text: string;
+  asset_url: string;
+  comfy_workflow: string;
+  created_at: string;
+};
 
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const r = await fetch(path, {
@@ -201,7 +242,7 @@ export const api = {
       body: JSON.stringify({ messages, model }),
     }),
 
-  // Stage 1: scan real CJ products, keep the n best storefront concepts.
+  // Stage 1: scan real CJ products, keep the n best campaign concepts.
   scout: (theme: string, model?: string, n = 8, pool = 0) =>
     req<ScoutResult>("/api/opportunities", {
       method: "POST",
@@ -213,16 +254,36 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ run_id, category_index, model }),
     }),
-  // Category -> storefront (+ seeded product candidates if drilled).
+  // Category -> campaign (+ seeded product candidates if drilled).
   promote: (run_id: number, category_index: number) =>
-    req<{ storefront_id: number; slug: string; products_seeded: number }>(
+    req<{ campaign_id: number; slug: string; products_seeded: number }>(
       "/api/opportunities/promote",
       {
         method: "POST",
         body: JSON.stringify({ run_id, category_index }),
       },
     ),
+  // Past scans, newest first -- used to restore the board across a refresh.
+  runs: () => req<RunSummary[]>("/api/opportunities"),
+  run: (run_id: number) => req<ScoutResult>(`/api/opportunities/${run_id}`),
 
-  storefronts: () => req<Storefront[]>("/api/storefronts"),
-  storefront: (id: number) => req<StorefrontDetail>(`/api/storefronts/${id}`),
+  campaigns: () => req<Campaign[]>("/api/campaigns"),
+  campaign: (id: number) => req<CampaignDetail>(`/api/campaigns/${id}`),
+
+  // Staging/review queue.
+  content: (campaignId: number) =>
+    req<ContentAsset[]>(`/api/campaigns/${campaignId}/content`),
+  generateImageAsset: (campaignId: number, productId: number) =>
+    req<ContentAsset>(`/api/campaigns/${campaignId}/products/${productId}/content/image`, {
+      method: "POST",
+    }),
+  generateCaptionAsset: (campaignId: number, productId: number, model?: string) =>
+    req<ContentAsset>(`/api/campaigns/${campaignId}/products/${productId}/content/caption`, {
+      method: "POST",
+      body: JSON.stringify({ model }),
+    }),
+  approveContent: (assetId: number) =>
+    req<ContentAsset>(`/api/content/${assetId}/approve`, { method: "POST" }),
+  rejectContent: (assetId: number) =>
+    req<ContentAsset>(`/api/content/${assetId}/reject`, { method: "POST" }),
 };

@@ -18,6 +18,10 @@ COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend ./backend
+# Every agent's prompt (+ schema) -- backend/agent.py reads these at import
+# time (Path(__file__).parents[1] / "agents"), so they must land next to
+# backend/, not inside it.
+COPY agents ./agents
 # The built SPA; backend/main.py mounts ./frontend/dist at / when present.
 COPY --from=ui /ui/dist ./frontend/dist
 

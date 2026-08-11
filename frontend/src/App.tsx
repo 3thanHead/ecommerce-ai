@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { Banner } from "./components";
+import { Campaigns } from "./pages/Campaigns";
 import { Chat } from "./pages/Chat";
 import { Opportunities } from "./pages/Opportunities";
-import { Storefronts } from "./pages/Storefronts";
 
-type Tab = "opportunities" | "storefronts" | "chat";
+// Review tab is pulled from the nav for now -- Opportunities + Campaigns
+// aren't solid yet and it's not pulling its weight in the meantime. The page
+// (pages/Review.tsx) and its backend (api/content.py) are untouched; add
+// "review" back to Tab + the nav array + the render block below to restore it.
+type Tab = "opportunities" | "campaigns" | "chat";
 
 export function App() {
   const [tab, setTab] = useState<Tab>("opportunities");
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState("");
   const [fleetErr, setFleetErr] = useState("");
-  const [storeRefresh, setStoreRefresh] = useState(0);
+  const [campaignRefresh, setCampaignRefresh] = useState(0);
 
   // Load the model list once — this is also the fleet health check.
   useEffect(() => {
@@ -46,7 +50,7 @@ export function App() {
           </select>
         </span>
         <nav>
-          {(["opportunities", "storefronts", "chat"] as Tab[]).map((t) => (
+          {(["opportunities", "campaigns", "chat"] as Tab[]).map((t) => (
             <button
               key={t}
               className={tab === t ? "active" : ""}
@@ -65,9 +69,9 @@ export function App() {
       )}
 
       {tab === "opportunities" && (
-        <Opportunities model={model} onPromoted={() => setStoreRefresh((n) => n + 1)} />
+        <Opportunities model={model} onPromoted={() => setCampaignRefresh((n) => n + 1)} />
       )}
-      {tab === "storefronts" && <Storefronts refreshKey={storeRefresh} />}
+      {tab === "campaigns" && <Campaigns refreshKey={campaignRefresh} />}
       {tab === "chat" && <Chat model={model} />}
     </div>
   );

@@ -31,7 +31,8 @@ import math
 import re
 import statistics
 
-from ..llm import get_heavy_llm, parse_json
+from ..agent import Agent
+from ..llm import get_heavy_llm
 from ..progress import Steps
 from . import catalog
 from .keywords import demand_batch
@@ -141,79 +142,10 @@ def _match_score(leaf: dict, want: set[str]) -> int:
 
 
 # The one model call in stage 1 -- and it only ever sees products that exist.
-_CLUSTER_SYS = """You are a dropshipping operator reviewing REAL products pulled
-live from CJdropshipping's catalog. Group them into STOREFRONT CONCEPTS -- each
-one a small, coherent shop a specific audience would buy from.
-
-You are NOT inventing products. Every product in the list exists and is
-sourceable; your only job is deciding which ones belong in the same store and
-what that store is.
-
-HARD RULES:
-- A concept is a SHOP, not a department: "Aquascaping tank tools", not "Pets".
-- Its audience is an identifiable sub-culture with its own vocabulary and its own
-  subreddits -- van-lifers, aquascapers, hammock campers, ferret owners, disc
-  golfers, EDC collectors, tarot readers, beekeepers.
-- Only group products that genuinely sell to the SAME buyer. Leave a product out
-  rather than stretch a concept around it.
-- These products came from a keyword search, so some merely SHARE A WORD with
-  what the operator wants -- a coffee TABLE and a coffee-COLOURED earring are not
-  coffee brewing. Discard those; do not build a store around them.
-- Use each product index at most ONCE, and only indexes from the list.
-- Between 2 and 8 products per concept.
-
-Output JSON only:
-{
-  "stores": [
-    {
-      "name": "the storefront name -- what it sells, plainly",
-      "audience": "who buys here -- a real, describable sub-culture",
-      "angle": "the wedge -- why this shop wins right now",
-      "keyword_seed": "the 2-4 word phrase this audience would search to buy",
-      "subreddits": ["3-5 REAL subreddit names, no r/ prefix"],
-      "products": [<indexes from the list>]
-    }
-  ]
-}"""
-
-_CLUSTER_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "stores": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string"},
-                    "audience": {"type": "string"},
-                    "angle": {"type": "string"},
-                    "keyword_seed": {"type": "string"},
-                    "subreddits": {"type": "array", "items": {"type": "string"}},
-                    "products": {"type": "array", "items": {"type": "integer"}},
-                },
-                "required": ["name", "audience", "angle", "keyword_seed",
-                             "subreddits", "products"],
-            },
-        }
-    },
-    "required": ["stores"],
-}
-
-
-_AISLE_SYS = """You map a shopper's theme onto a dropship supplier's REAL category
-list. You are given the supplier's actual aisles, numbered. Pick the ones whose
-products that theme's buyers would shop -- including the non-obvious ones (a
-"desk setup" buyer shops cable management, desk mats, lighting, and stationery).
-
-You may ONLY return numbers from the list. Never invent a category.
-
-Output JSON only: {"aisles": [<numbers, most relevant first>]}"""
-
-_AISLE_SCHEMA = {
-    "type": "object",
-    "properties": {"aisles": {"type": "array", "items": {"type": "integer"}}},
-    "required": ["aisles"],
-}
+# Prompt + schema: agents/cluster.md.
+_cluster_agent = Agent("cluster", heavy=True)
+# Prompt + schema: agents/aisle-map.md.
+_aisle_agent = Agent("aisle-map", heavy=True)
 
 
 async def _aisles_by_model(theme: str, groups: list[str], model: str | None) -> list[str]:
@@ -222,9 +154,7 @@ async def _aisles_by_model(theme: str, groups: list[str], model: str | None) -> 
     listing = "\n".join(f"{i}. {g}" for i, g in enumerate(groups))
     user = f"THEME: {theme}\n\nSUPPLIER AISLES:\n{listing}"
     try:
-        data = parse_json(await get_heavy_llm().chat(
-            [{"role": "system", "content": _AISLE_SYS}, {"role": "user", "content": user}],
-            model=model, temperature=0.2, fmt=_AISLE_SCHEMA))
+        data = await _aisle_agent.chat(user, model=model, temperature=0.2)
         picks = data.get("aisles", []) if isinstance(data, dict) else []
         return [groups[i] for i in picks if isinstance(i, int) and 0 <= i < len(groups)]
     except Exception as e:
@@ -331,24 +261,16 @@ async def _cluster(products: list[dict], n: int, model: str | None,
     user = (f"{asked}Group these {len(products)} real CJdropshipping products into "
             f"about {n} storefront concepts. Leave out anything that doesn't "
             f"fit.\n\n{listing}")
-    messages = [{"role": "system", "content": _CLUSTER_SYS},
-                {"role": "user", "content": user}]
     label = f"Grouping {len(products)} real products into store concepts"
     data = {}
     try:
-        llm = get_heavy_llm()
         if s:
             await s.running(label)
-            raw = ""
-            async for chunk in llm.chat_stream(messages, model=model, temperature=0.4,
-                                               fmt=_CLUSTER_SCHEMA):
-                raw += chunk
-                await s.thought(chunk)
-            data = parse_json(raw)
+            data = await _cluster_agent.chat_stream(user, on_chunk=s.thought,
+                                                     model=model, temperature=0.4)
             await s.done(label)
         else:
-            data = parse_json(await llm.chat(messages, model=model, temperature=0.4,
-                                             fmt=_CLUSTER_SCHEMA))
+            data = await _cluster_agent.chat(user, model=model, temperature=0.4)
     except Exception as e:
         log.warning("clustering failed (%s)", e)
         if s:
@@ -540,11 +462,13 @@ async def prospect(theme: str = "", model: str | None = None, n: int = 8,
             c["saturation"] = round(statistics.mean(p["saturation"] for p in items))
             c["listings"] = round(statistics.mean(p["listings"] for p in items))
             # Two readings of demand: the concept's own shopper phrase, and the
-            # aisles its products came from. Take the stronger -- a quiet
-            # autocomplete on the model's phrasing isn't evidence that nobody
-            # shops the category the products actually live in.
+            # aisles its products came from. Prefer the concept's own reading --
+            # it's the more specific probe -- and only fall back to the aisles'
+            # when Suggest went quiet on it (None). Taking the max of the two
+            # (as this used to) meant one lucky aisle pinned every concept's
+            # demand near the ceiling regardless of the concept's own signal.
             aisle = max((p["demand"] or 0) for p in items)
-            c["demand"] = max(d or 0, aisle) or None
+            c["demand"] = d if d is not None else (aisle or None)
             c["opportunity"] = _opportunity(c["demand"], c["saturation"], c["listings"])
             c["band"] = "crowded" if c["saturation"] > max_saturation else "open"
             c["saturation_method"] = "measured"

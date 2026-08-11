@@ -42,6 +42,27 @@ class Settings(BaseSettings):
     def has_cj(self) -> bool:
         return bool(self.cj_email and self.cj_api_key)
 
+    # --- Image generation (edge-ai's image-gen node) ---
+    # Points at the fleet's image-role box (see edge-ai/apps/image-gen). Blank
+    # -> the feature quietly disables, same degrade pattern as CJ above.
+    image_base_url: str = ""
+    image_model: str = ""
+
+    @property
+    def has_image_gen(self) -> bool:
+        return bool(self.image_base_url)
+
+    # --- Web search (local SearXNG, see docker-compose.yml) ---
+    # In-network Docker service name -- no LAN hop needed, unlike Ollama.
+    # Backs the web-research agent (backend/research/websearch.py); blank or
+    # unreachable -> that agent just gets no web evidence, same degrade
+    # pattern as everything else here.
+    searxng_base_url: str = "http://searxng:8080"
+
+    @property
+    def has_searxng(self) -> bool:
+        return bool(self.searxng_base_url)
+
 
 @lru_cache
 def get_settings() -> Settings:

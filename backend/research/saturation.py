@@ -1,23 +1,19 @@
-"""Measured saturation -- supply counts vs. demand, instead of the model's guess.
+"""CJdropshipping access: an auth-token cache, the phrase-checked supply lookup,
+and a health probe -- shared by whoever needs to know if CJ actually carries a
+keyword. (The concept-level saturation shown on the board is a *different*,
+already-real computation in prospect.py, from actual per-product listing
+counts; this module used to also drive a drill-stage saturation/demand
+re-measurement, but nothing ever read its output, so that's gone -- see
+products.py for how a search seed gets resolved into a real CJ product.)
 
-Saturation is a supply-crowdedness signal: how many sellers already compete for a
-keyword. We read that from CJdropshipping (the supply provider) and log-scale it
-0-100. Demand is the free keyword-breadth signal we already have. The opportunity
-is high demand + low saturation.
-
-Everything is local + private -- these are OUTBOUND calls from your machine;
-nothing is exposed. The provider is optional and fail-soft: unconfigured (or
-erroring) yields `measured: False` and callers keep the model's estimate.
-
-  CJdropshipping  # of dropship products for the keyword -- the supply signal
-                  (and the Feature 2 catalog). Free account. PHRASE-CHECKED,
-                  see _cj_supply: their raw total is not a count of the thing
-                  you searched for.
+Everything here is local + private -- these are OUTBOUND calls from your
+machine; nothing is exposed. The provider is optional and fail-soft:
+unconfigured (or erroring) yields `None`/`configured: False` and callers
+degrade accordingly.
 """
 import asyncio
 import json
 import logging
-import math
 import os
 import re
 import time
@@ -27,11 +23,6 @@ import httpx
 from ..config import get_settings
 
 log = logging.getLogger(__name__)
-
-# Count that reads as "fully saturated" on the log scale (tunable). Calibrated
-# against PHRASE-MATCHED counts, where the most commoditized products on CJ land
-# around 7-8k ("phone case"), NOT against CJ's raw `total` -- see _cj_supply.
-_SATURATION_CEILING = 10_000
 
 
 class _Throttle:
@@ -54,18 +45,6 @@ class _Throttle:
 # (a prospecting scan) doesn't 429. They still fire back-to-back. 1.15s still
 # drew occasional 429s on the larger sampled pages, so give it real headroom.
 _cj_query_throttle = _Throttle(2.0)
-
-
-def _supply_score(count: int) -> int:
-    if count <= 0:
-        return 0
-    score = math.log10(count + 1) / math.log10(_SATURATION_CEILING) * 100
-    return max(0, min(100, round(score)))
-
-
-def _demand_score(keywords: list[dict]) -> int:
-    # Breadth proxy: how many long-tail phrases the seed autocompletes into.
-    return max(0, min(100, len(keywords) * 5))
 
 
 # ----------------------------- CJdropshipping ----------------------------
@@ -239,53 +218,3 @@ async def health(sample: str = "desk mat") -> dict:
         row["ok"] = count is not None
         row["sample_count"] = count
     return {"sample_keyword": sample, "providers": [row]}
-
-
-async def _supply_only(keyword: str) -> dict:
-    """Supply-based saturation for one keyword (no demand side). Building block.
-
-    `sourceable` is how many products we DIRECTLY observed carry the phrase (CJ's
-    matched sample) -- a real supplier existence check, distinct from the
-    extrapolated `supply` count that drives saturation. Callers gate "can I even
-    source this?" on `sourceable`, not on an estimate."""
-    cj = await _cj_supply(keyword)
-    if cj is None:
-        return {"measured": False, "saturation": None, "supply": {},
-                "sourceable": None, "method": "estimated"}
-    supply = {"cjdropshipping": cj["count"]}
-    return {"measured": True, "saturation": _supply_score(cj["count"]),
-            "supply": supply, "sourceable": cj["matched"], "method": "measured"}
-
-
-async def measure(keyword: str, keywords: list[dict]) -> dict:
-    """Measured saturation for a keyword (drill). Adds the demand side.
-    measured=False -> caller keeps the model's estimate."""
-    out = await _supply_only(keyword)
-    out["demand"] = _demand_score(keywords)
-    return out
-
-
-async def measure_batch(keywords: list[str], concurrency: int = 4,
-                        on_result=None) -> list[dict]:
-    """Supply-based saturation for many keywords at once (the leaderboard).
-
-    Runs the per-keyword lookups CONCURRENTLY behind a semaphore -- the whole
-    batch finishes in about the time of one, without tripping CJ's rate limit.
-    Each entry degrades independently to measured=False.
-
-    `on_result(index, keyword, result)` is awaited as each one lands, so a long
-    prospecting scan can stream progress instead of going quiet for a minute
-    (CJ's ~1 req/sec throttle means a 40-candidate batch takes ~45s)."""
-    sem = asyncio.Semaphore(concurrency)
-
-    async def one(i: int, kw: str) -> dict:
-        async with sem:
-            r = await _supply_only(kw)
-        if on_result:
-            try:
-                await on_result(i, kw, r)
-            except Exception as e:  # progress must never sink the measurement
-                log.debug("measure_batch progress callback failed (%s)", e)
-        return r
-
-    return await asyncio.gather(*(one(i, kw) for i, kw in enumerate(keywords)))

@@ -1,8 +1,10 @@
-# One service runs everything: FastAPI + the React admin it serves (built into
-# the image) + SQLite on the mounted ./data volume. Open http://localhost:8820.
-# AI generation happens on edge-ai (Ollama) over the LAN via OLLAMA_BASE_URL, so
-# nothing heavy runs here. Per-machine config is .env (gitignored; see
-# .env.example).
+# FastAPI + the React admin it serves (built into the image) + SQLite on the
+# mounted ./data volume. Open http://localhost:8820. AI generation happens on
+# edge-ai (Ollama) over the LAN via OLLAMA_BASE_URL, so nothing heavy runs
+# here. searxng+redis are the exception -- a local, keyless web-search backend
+# for the web-research agent (backend/research/websearch.py); everything else
+# still degrades gracefully if they're down. Per-machine config is .env
+# (gitignored; see .env.example).
 #
 #   make run     -> docker compose up -d --build   (then open :8820)
 services:
@@ -26,6 +28,30 @@ services:
       # Supply counts for measured saturation (optional; degrade to model estimate).
       CJ_EMAIL: ${CJ_EMAIL:-}
       CJ_API_KEY: ${CJ_API_KEY:-}
+      # Local keyless web search for the web-research agent (optional; degrades
+      # to no web evidence if unset/unreachable). In-network service name --
+      # no LAN hop needed, unlike Ollama.
+      SEARXNG_BASE_URL: ${SEARXNG_BASE_URL:-http://searxng:8080}
+      # Product image generation, edge-ai's image-gen node (optional; degrades
+      # to the "Generate image" button just not working).
+      IMAGE_BASE_URL: ${IMAGE_BASE_URL:-}
+      IMAGE_MODEL: ${IMAGE_MODEL:-}
     volumes:
       - ./data:/app/data
+    depends_on:
+      - searxng
+    restart: unless-stopped
+
+  searxng:
+    image: searxng/searxng:latest
+    volumes:
+      - ./searxng:/etc/searxng:rw
+    environment:
+      - BASE_URL=http://localhost:8080/
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: valkey/valkey:8-alpine
     restart: unless-stopped

@@ -1,12 +1,19 @@
 # ecommerce-ai
 
-Hit a button and get **storefront concepts built out of real products** — scanned
+Hit a button and get **campaign concepts built out of real products** — scanned
 live from CJdropshipping's catalog, scored by how many sellers are already on each
 item versus how many people search for it. Every product on the board exists and
-is sourceable, so promoting a concept builds a storefront out of inventory rather
+is sourceable, so promoting a concept builds a campaign out of inventory rather
 than out of an idea. Drill any concept into **real Reddit discussion** for its
 audience and the subreddits you could actually post in. Generation runs on your
-**edge-ai** Ollama cluster (free, local); this app just orchestrates and stores.
+**edge-ai** cluster (free, local) — Ollama for text, an image-gen node for
+product photos; this app just orchestrates and stores.
+
+The end goal isn't a store page — it's **social-media-native ad content**: a
+generated product image/video with a caption, staged for review, then posted to
+TikTok/Instagram/YouTube (Reddit stays manual — most subreddits ban
+self-promo bots) with a checkout link. See the roadmap at the bottom for what's
+built vs. what's next.
 
 Built **feature by feature**. Working today:
 
@@ -19,7 +26,7 @@ Built **feature by feature**. Working today:
   **opportunity = demand × openness × proof-of-sale**: a product nobody competes
   on *and* nobody buys scores near zero, because an empty aisle isn't an
   opportunity. Only then does the model get involved — grouping the winning real
-  products into **storefront concepts** (name, audience, angle, subreddits).
+  products into **campaign concepts** (name, audience, angle, subreddits).
 - **Surprise me.** No theme? It rotates into CJ categories recent runs haven't
   touched (it remembers), so each run sweeps new aisles. No model needed to
   choose, so a flaky fleet can't stall the scan. With a theme, it matches CJ's
@@ -33,17 +40,23 @@ Built **feature by feature**. Working today:
   their real CJ ids already attached. **Resolve** fetches each one's full record —
   price, image gallery, video — live from CJ. (Legacy candidates that only carry
   a search seed still get the search-and-verify path.)
-- **Storefront generation.** Hit **Generate store** and the model writes the
-  store's branding (tagline, hero, accent colour) and a benefit-led sales pitch
-  per product, aimed at that concept's audience. It renders a real customer-facing
-  page at **`/store/{slug}`** — hero + product grid with the CJ images, pitches,
-  and prices. The actual live end of the pipeline.
+- **Content generation + review queue.** On the **Review** tab, a resolved
+  product gets **Generate content**: one social-ad-style image from the
+  edge-ai fleet's image-gen node, and one caption (hook, benefits, CTA,
+  hashtags) from the same Ollama connection. Both land as `pending_review`
+  `ContentAsset` rows — nothing posts anywhere until you **Approve** it (an
+  approved image also becomes an official product photo; rejected ones just
+  sit there for reference). `+ image`/`+ caption` regenerate one piece at a
+  time if you want another take.
 - **Streamed + local.** Every step streams live, like a build log. One Ollama
   endpoint, model chosen per request; an optional heavier model for clustering.
 
-**Next:** a daily unattended batch that sweeps the catalog and builds stores from
-what it finds; then POD/digital verticals (which need their own supply signals —
-CJ is dropship-only).
+**Roadmap (not built yet):** video generation + a ComfyUI drag-and-drop layer
+on the edge-ai fleet for workshopping product placement (adds a `video` kind
+to the same review queue); a self-hosted **Postiz** integration so approving
+a piece of content actually posts it to TikTok/Instagram/YouTube; Stripe
+Payment Links for checkout. Then: a daily unattended batch that sweeps the
+catalog on its own.
 
 ## Flow
 
@@ -57,17 +70,19 @@ CJ is dropship-only).
                  │  score each: saturation = sellers already on it,
                  │  demand = buyer-intent autocompletes, proof = has it ever sold
                  ▼
-   the openest distinct products  ──►  model groups them into STOREFRONT CONCEPTS
+   the openest distinct products  ──►  model groups them into CAMPAIGN CONCEPTS
                  │                      (falls back to CJ's own categories if the
                  │                       fleet is down — the board still comes out)
                  │  click one → drill (audience) or automate
                  ▼
-   storefront + its real products (CJ ids already attached)
+   campaign + its real products (CJ ids already attached)
                  │  Resolve → full gallery, video, current price from CJ
                  ▼
-   Generate → model writes branding + per-product sales copy
+   Generate content → image (edge-ai image-gen) + caption (Ollama), staged
+                 │
+                 │  Approve / Reject each piece on the Review tab
                  ▼
-   live store at /store/{slug}  (hero + product grid, real images/prices)
+   (roadmap) approved content posted via Postiz → checkout via Stripe
 ```
 
 Nothing invented survives to the board: the model never names a product, it only
@@ -140,6 +155,7 @@ make ui                       # admin UI :5173   (terminal 2, proxies /api)
 | `OLLAMA_HEAVY_BASE_URL` / `_MODEL` | optional bigger model for the clustering step (blank = use the workhorse) |
 | `DATABASE_URL` | SQLite path (default `sqlite:///data/storefront.db`) |
 | `CJ_EMAIL` / `CJ_API_KEY` | **required** — CJ's catalog is what stage 1 prospects (and the product source) |
+| `IMAGE_BASE_URL` / `IMAGE_MODEL` | optional — edge-ai's image-gen node; blank disables "Generate image" |
 
 ## Layout
 
@@ -148,15 +164,16 @@ backend/
   llm/ollama.py          the whole AI connection (one Ollama endpoint, schema-JSON)
   research/
     catalog.py           CJ's catalog: real category tree + real products
-    prospect.py          stage 1 — scan real products → storefront concepts
+    prospect.py          stage 1 — scan real products → campaign concepts
     drilldown.py         stage 2 — concept → subreddits + posts → audience research
     reddit.py            Reddit grounding: PullPush (posts) + Arctic Shift (profiles)
     keywords.py          Google Suggest keyword expansion + demand probe
     saturation.py        CJ auth/throttle + keyword-supply counts (drill-down)
     products.py          Feature 2 — hydrate a CJ pid (or resolve a legacy seed)
-    store_gen.py         storefront generation — branding + per-product sales copy
-  api/                   chat, opportunities, storefronts, diagnostics, render (/store)
-  models.py              Storefront / Product / Niche / ResearchRun (SQLite)
-frontend/src/            React admin: Opportunities, Storefronts, Chat
+    images.py             product image generation via edge-ai's image-gen node
+    captions.py           social caption generation via Ollama
+  api/                   chat, opportunities, campaigns, content (review queue), diagnostics
+  models.py              Campaign / Product / Niche / ContentAsset / ResearchRun (SQLite)
+frontend/src/            React admin: Opportunities, Campaigns, Review, Chat
 infra/                   Terraform (AWS deploy — later)
 ```
