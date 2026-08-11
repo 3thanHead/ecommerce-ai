@@ -89,7 +89,7 @@ def _cache_drill(run_id: int, idx: int, result: dict) -> None:
         session.commit()
 
 
-def _build_campaign(cat: dict, drill_result: dict | None = None) -> dict:
+def _build_campaign(cat: dict) -> dict:
     """Create a Campaign from a concept, seeded with its REAL CJ products.
 
     The board already resolved these against CJ, so each Product lands with its
@@ -165,7 +165,7 @@ async def automate_stream(req: DrillRequest):
         _cache_drill(req.run_id, req.category_index, result)
 
         await s.running("Building campaign from its real CJ products")
-        built = _build_campaign(cat, result)
+        built = _build_campaign(cat)
         await s.done(f"Built campaign /{built['slug']} with {built['products_seeded']} real CJ products")
         await s.done(f"Automating “{cat['name']}”")
         await emit(type="result", data={**built, "drill": result})
@@ -209,7 +209,7 @@ def promote(req: PromoteRequest, session: Session = Depends(get_session)):
         cat = _category_at(run, req.category_index)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return _build_campaign(cat, cat.get("drill"))
+    return _build_campaign(cat)
 
 
 @router.get("")

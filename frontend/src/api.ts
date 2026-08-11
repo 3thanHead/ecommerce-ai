@@ -1,6 +1,12 @@
 // One tiny fetch wrapper. Everything is a relative /api call so it works the
 // same in dev (Vite proxy) and prod (served by FastAPI).
 
+// No cjProductUrl() here on purpose: CJ's sourcing API (what pid/cj_product_id
+// come from) uses a numeric id, but the live storefront now keys product
+// pages by a different UUID id our data doesn't have -- any link built from
+// pid lands on a broken/region-gated page. Nothing to point to until that
+// gap closes on CJ's end.
+
 export type Opportunity = {
   product: string;
   rationale: string;
@@ -39,18 +45,27 @@ export type SubredditProfile = {
   reason: string;
 };
 
+export type WebFinding = {
+  title: string;
+  url: string;
+  snippet: string;
+  note?: string;
+};
+
 export type Drill = {
   category: string;
   reddit_source: string; // pullpush+arctic | arctic-only | model-only
+  web_source: string; // searxng | unavailable
+  // The model's own re-rating from what the drill turned up (free, same
+  // call) -- not currently shown anywhere; the board's real saturation meter
+  // uses Category.saturation, measured from actual CJ listing counts.
   saturation: number;
   saturation_reasoning: string;
-  saturation_method: "measured" | "estimated";
-  saturation_supply: Record<string, number>; // {provider: listing count}
-  saturation_demand: number;
   subreddits: SubredditProfile[];
   opportunities: Opportunity[];
   keywords: Keyword[];
   posts_sampled: Post[];
+  web_findings: WebFinding[];
 };
 
 // A real CJdropshipping product, straight off their catalog — the atom the whole
@@ -152,6 +167,15 @@ export type ScoutResult = {
   error?: string;
 };
 
+// Row from GET /api/opportunities -- one past scan, newest first.
+export type RunSummary = {
+  id: number;
+  theme: string;
+  model: string;
+  categories: number;
+  created_at: string;
+};
+
 export type Campaign = {
   id: number;
   slug: string;
@@ -239,6 +263,9 @@ export const api = {
         body: JSON.stringify({ run_id, category_index }),
       },
     ),
+  // Past scans, newest first -- used to restore the board across a refresh.
+  runs: () => req<RunSummary[]>("/api/opportunities"),
+  run: (run_id: number) => req<ScoutResult>(`/api/opportunities/${run_id}`),
 
   campaigns: () => req<Campaign[]>("/api/campaigns"),
   campaign: (id: number) => req<CampaignDetail>(`/api/campaigns/${id}`),

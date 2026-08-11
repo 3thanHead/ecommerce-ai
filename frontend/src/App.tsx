@@ -4,9 +4,12 @@ import { Banner } from "./components";
 import { Campaigns } from "./pages/Campaigns";
 import { Chat } from "./pages/Chat";
 import { Opportunities } from "./pages/Opportunities";
-import { Review } from "./pages/Review";
 
-type Tab = "opportunities" | "campaigns" | "review" | "chat";
+// Review tab is pulled from the nav for now -- Opportunities + Campaigns
+// aren't solid yet and it's not pulling its weight in the meantime. The page
+// (pages/Review.tsx) and its backend (api/content.py) are untouched; add
+// "review" back to Tab + the nav array + the render block below to restore it.
+type Tab = "opportunities" | "campaigns" | "chat";
 
 export function App() {
   const [tab, setTab] = useState<Tab>("opportunities");
@@ -47,7 +50,7 @@ export function App() {
           </select>
         </span>
         <nav>
-          {(["opportunities", "campaigns", "review", "chat"] as Tab[]).map((t) => (
+          {(["opportunities", "campaigns", "chat"] as Tab[]).map((t) => (
             <button
               key={t}
               className={tab === t ? "active" : ""}
@@ -69,7 +72,6 @@ export function App() {
         <Opportunities model={model} onPromoted={() => setCampaignRefresh((n) => n + 1)} />
       )}
       {tab === "campaigns" && <Campaigns refreshKey={campaignRefresh} />}
-      {tab === "review" && <Review model={model} />}
       {tab === "chat" && <Chat model={model} />}
     </div>
   );

@@ -3,16 +3,11 @@
 Reuses the same Ollama connection as everything else (backend/llm/ollama.py)
 -- no new infra, just a prompt aimed at short-form social copy instead of
 store branding (which store_gen.py used to write, before the storefront
-feature was removed).
+feature was removed). Prompt: agents/caption.md.
 """
-from ..llm import get_llm
+from ..agent import Agent
 
-_SYS = """You write short, punchy captions for a social media video/image ad
-selling a dropshipped product (TikTok / Instagram Reels / YouTube Shorts
-style). Given a product and its audience, write ONE caption: a hook line,
-1-2 short benefit lines, a clear call to action, then 3-6 relevant hashtags
-on their own line. No preamble, no markdown, no emojis unless they genuinely
-fit the audience. Keep the whole thing under 120 words."""
+_agent = Agent("caption")
 
 
 async def generate_caption(title: str, description: str = "", audience: str = "",
@@ -24,8 +19,4 @@ async def generate_caption(title: str, description: str = "", audience: str = ""
     user = (f"PRODUCT: {title}\n"
             + (f"{description}\n" if description.strip() else "")
             + f"AUDIENCE: {audience or '(general online shoppers)'}")
-    text = await get_llm().chat(
-        [{"role": "system", "content": _SYS}, {"role": "user", "content": user}],
-        model=model, temperature=0.7,
-    )
-    return text.strip()
+    return await _agent.chat(user, model=model, temperature=0.7)

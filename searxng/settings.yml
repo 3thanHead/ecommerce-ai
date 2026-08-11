@@ -1,0 +1,15 @@
+# Minimal override -- everything else is SearXNG's own defaults
+# (use_default_settings pulls those in). This instance is private, reached
+# only from the `app` container over the compose network (no host port
+# published), so the public-instance bot wall serves no purpose here and
+# would otherwise block the JSON API our web-research agent depends on.
+use_default_settings: true
+
+server:
+  secret_key: "59996e2b3fea9b4e2fe87f6750afe3f7"
+  limiter: false
+
+search:
+  formats:
+    - html
+    - json

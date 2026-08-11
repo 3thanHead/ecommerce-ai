@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, Category, CJProduct, Drill, Scan, ScoutResult } from "../api";
 import { Banner, Meter, Working } from "../components";
 import { useJob } from "../useJob";
@@ -142,17 +142,38 @@ export function Opportunities({
   const [n, setN] = useState(8);
   const [cats, setCats] = useState(8);
   const scout = useJob<ScoutResult>();
+  const [restored, setRestored] = useState<ScoutResult | null>(null);
+  const [restoring, setRestoring] = useState(true);
 
   const pool = cats * 100;
+
+  // Reopen the last scan on load so a refresh doesn't lose your place -- the
+  // board is already saved server-side as a ResearchRun, just never read back.
+  useEffect(() => {
+    api
+      .runs()
+      .then((runs) => {
+        if (!runs.length) return;
+        return api.run(runs[0].id).then((r) => {
+          setRestored(r);
+          setTheme(r.theme);
+        });
+      })
+      .catch(() => {
+        /* no prior runs (or backend not ready yet) -- start blank */
+      })
+      .finally(() => setRestoring(false));
+  }, []);
 
   // No theme -> "surprise me": rotate into CJ categories recent runs skipped.
   // A typed theme picks the real categories whose names match it.
   function find() {
     if (scout.running) return;
+    setRestored(null); // a fresh scan replaces whatever was restored
     scout.run("/api/opportunities/stream", { theme, model, n, pool });
   }
 
-  const result = scout.result;
+  const result = scout.result ?? restored;
 
   return (
     <>
@@ -206,7 +227,7 @@ export function Opportunities({
             <Working steps={scout.steps} thinking={scout.thinking} />
           </div>
         )}
-        {!result && !scout.running && scout.steps.length === 0 && (
+        {!result && !restoring && !scout.running && scout.steps.length === 0 && (
           <p className="muted" style={{ marginBottom: 0 }}>
             Hit <b>Surprise me</b> and it sweeps aisles of CJdropshipping's real
             catalog you haven't looked at yet, scores every product by how many
@@ -214,6 +235,11 @@ export function Opportunities({
             groups the openings into campaign concepts. Every product you see is
             real and sourceable — drill one for its audience, or{" "}
             <b>Automate</b> the whole campaign.
+          </p>
+        )}
+        {restored && result === restored && !scout.running && (
+          <p className="muted" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
+            ↺ showing your last scan · “{restored?.theme || "surprise me"}”
           </p>
         )}
       </div>
@@ -465,6 +491,27 @@ function CategoryCard({
                     </div>
                   ))}
                 </div>
+              )}
+
+              {drill.web_findings.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <label>General web evidence ({drill.web_findings.length})</label>
+                  {drill.web_findings.map((f) => (
+                    <div key={f.url} className="thread" style={{ paddingBottom: 8 }}>
+                      <a href={f.url} target="_blank" rel="noreferrer">
+                        {f.title}
+                      </a>
+                      <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                        {f.note || f.snippet}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {drill.web_source === "unavailable" && (
+                <p className="muted" style={{ fontSize: 12, marginTop: -6, marginBottom: 14 }}>
+                  No web evidence this time — SearXNG unreachable or nothing relevant found.
+                </p>
               )}
 
               {drill.keywords.length > 0 && (

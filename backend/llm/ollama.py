@@ -68,6 +68,33 @@ class OllamaClient:
             content = r.json()["message"]["content"]
         return _strip_think(content)
 
+    async def chat_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+        model: str | None = None,
+        temperature: float = 0.7,
+    ) -> dict:
+        """One non-streaming turn with tool-calling enabled -> the raw message
+        dict (role, content, tool_calls), not just the text `chat()` returns --
+        a tool-calling caller needs to see `tool_calls` to know whether the
+        model wants to act or is done. Ollama's tool-calling only supports
+        `stream: false` for the decision turn (see backend/agent.py's
+        ToolAgent, the only caller of this)."""
+        payload = {
+            "model": model or self.default_model,
+            "messages": messages,
+            "tools": tools,
+            "stream": False,
+            "options": {"temperature": temperature},
+        }
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            r = await client.post(f"{self.base_url}/api/chat", json=payload)
+            r.raise_for_status()
+            message = r.json()["message"]
+        message["content"] = _strip_think(message.get("content") or "")
+        return message
+
     async def chat_stream(
         self,
         messages: list[dict],

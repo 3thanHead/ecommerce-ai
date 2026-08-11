@@ -16,7 +16,7 @@ import re
 
 import httpx
 
-from ..llm import get_heavy_llm, parse_json
+from ..agent import Agent
 from . import catalog
 from .saturation import (
     _cj_query_throttle,
@@ -30,29 +30,10 @@ log = logging.getLogger(__name__)
 
 _LIST_URL = "https://developers.cjdropshipping.com/api2.0/v1/product/list"
 
-_JUDGE_SYS = """You are sourcing a product for a store. You get a PRODUCT IDEA
-(+ its audience) and a numbered list of REAL CJdropshipping product names. Pick
-the index of the ONE that is GENUINELY that exact product -- the item a shopper
-searching for the idea would look at and say "yes, that IS it."
-
-Return -1 (none) if the only options are:
-- a DIFFERENT product in the same category -- a dog LEASH/strap is NOT a dog BED;
-  a yoga MAT is NOT an aerial yoga HAMMOCK; a phone STAND is NOT a phone CASE;
-  a craft KIT is NOT an air-plant terrarium KIT,
-- an ACCESSORY, PART, replacement, or add-on FOR the product rather than the
-  product itself,
-- something only loosely related, a different use, or unrelated junk.
-
-Only accept an EXACT-TYPE match. When unsure, return -1 -- a wrong product on the
-shelf is worse than an empty slot.
-
-Output JSON only: {"index": <0-based index, or -1 if none genuinely fits>, "why": "one short line"}"""
-
-_JUDGE_SCHEMA = {
-    "type": "object",
-    "properties": {"index": {"type": "integer"}, "why": {"type": "string"}},
-    "required": ["index"],
-}
+# Prompt + schema: agents/product-judge.md. Judged on the heavy node when
+# configured -- relevance judgment is exactly where the bigger model earns
+# its keep (falls back to the workhorse).
+_judge_agent = Agent("product-judge", heavy=True)
 
 _JUDGE_POOL = 12  # how many CJ names to put in front of the judge
 
@@ -100,11 +81,7 @@ async def _judge(idea: str, audience: str, names: list[str], model: str | None) 
     user = (f"PRODUCT IDEA: {idea}\nAUDIENCE: {audience or '(unspecified)'}\n\n"
             f"CJ PRODUCTS:\n{listing}")
     try:
-        # Judge on the heavy node when configured -- relevance judgment is exactly
-        # where the bigger model earns its keep (falls back to the workhorse).
-        data = parse_json(await get_heavy_llm().chat(
-            [{"role": "system", "content": _JUDGE_SYS}, {"role": "user", "content": user}],
-            model=model, temperature=0, fmt=_JUDGE_SCHEMA))
+        data = await _judge_agent.chat(user, model=model, temperature=0)
         idx = int(data.get("index", -1)) if isinstance(data, dict) else -1
         return idx if 0 <= idx < len(names) else -1
     except Exception as e:

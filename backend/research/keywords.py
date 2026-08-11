@@ -12,6 +12,8 @@ from collections import Counter
 
 import httpx
 
+from .saturation import _content_tokens, _matches, _tokens
+
 log = logging.getLogger(__name__)
 
 _MODIFIERS = [
@@ -58,11 +60,19 @@ async def expand_keywords(seed: str, limit: int = 20) -> list[dict]:
 # breadth, not volume (no free source gives volume), but it's enough to keep the
 # descent from bottoming out in niches nobody buys.
 _DEMAND_PREFIXES = ["{s}", "best {s}", "{s} for", "buy {s}", "{s} reviews"]
-# ~this many distinct buyer-intent autocompletes reads as full demand. Tuned to
-# NICHE product phrases, which rarely autocomplete richly -- ~12-20 distinct is a
-# genuinely-shopped niche, so it should read as strong demand, not middling. (Was
-# 40, which pinned even good niches down near 30.)
-_DEMAND_FULL = 22
+# ~this many MATCHED buyer-intent autocompletes reads as full demand (see
+# _demand_count -- raw autocomplete counts don't discriminate: Google Suggest
+# happily rewrites any 2+ word phrase into a related-but-different popular
+# query, e.g. "personal care appliances" -> "personal care products", so almost
+# every seed produced 30-40 raw suggestions and pinned the score at 100. Only
+# the ones that still describe the seed (same phrase-check used for CJ supply
+# in saturation.py) are counted. Calibrated against real seeds: truly
+# mainstream products ("phone case", "yoga mat", "disc golf bag") still land
+# 40-50 matched and deserve 100; established niches ("vintage brooches",
+# "tarot card deck") land 25-40; thin ones ("aquascaping co2 diffuser", "van
+# life curtain", "hammock camping straps") land under 6 -- 30 spreads all
+# three bands out instead of pinning everything at the ceiling.
+_DEMAND_FULL = 30
 
 
 async def _demand_count(client: httpx.AsyncClient, seed: str) -> int | None:
@@ -73,7 +83,14 @@ async def _demand_count(client: httpx.AsyncClient, seed: str) -> int | None:
     except Exception as e:
         log.debug("demand probe failed for %r: %s", seed, e)
         return None
-    return len({p.lower().strip() for r in results for p in r if p})
+    phrases = {p.lower().strip() for r in results for p in r if p}
+    want = _content_tokens(seed)
+    if not want:
+        return len(phrases)
+    # Suggest ORs/rewrites the query, so raw phrases include a lot that no
+    # longer describe the seed at all ("best personal care appliances" ->
+    # "best personal care products"). Keep only the ones that still do.
+    return sum(1 for p in phrases if _matches(set(_tokens(p)), want))
 
 
 def _score_demand(count: int) -> int:
